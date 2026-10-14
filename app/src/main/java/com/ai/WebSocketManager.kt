@@ -52,19 +52,18 @@ class WebSocketManager(
         
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                onMessageReceived("Terhubung! Mengirim setup...")
+                onMessageReceived("Terhubung ke Server. Mengirim setup...")
                 sendSetupMessage()
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                onMessageReceived("Pesan masuk: ${text.take(40)}")
                 try {
                     val json = JSONObject(text)
-                    
-                    // Cek jika server mengirimkan error
                     if (json.has("error")) {
                         val errorObj = json.getJSONObject("error")
-                        val message = errorObj.optString("message", "Error tidak dikenal")
-                        onMessageReceived("Server Error: $message")
+                        val message = errorObj.optString("message", "Error")
+                        onMessageReceived("API Error: $message")
                         return
                     }
                     
@@ -77,26 +76,19 @@ class WebSocketManager(
                                 val part = parts.getJSONObject(i)
                                 if (part.has("inlineData")) {
                                     val inlineData = part.getJSONObject("inlineData")
-                                    val mimeType = inlineData.optString("mimeType", "")
-                                    if (mimeType.startsWith("audio/")) {
-                                        val base64Data = inlineData.getString("data")
-                                        val audioBytes = Base64.getDecoder().decode(base64Data)
-                                        
-                                        audioTrack?.write(audioBytes, 0, audioBytes.size)
-                                        onMessageReceived("Memutar suara AI...")
-                                        return
-                                    }
+                                    val base64Data = inlineData.getString("data")
+                                    val audioBytes = Base64.getDecoder().decode(base64Data)
+                                    audioTrack?.write(audioBytes, 0, audioBytes.size)
+                                    onMessageReceived("Memutar suara AI...")
+                                    return
                                 }
                             }
                         }
                     } else if (json.has("setupComplete")) {
                         onMessageReceived("Siap! Silakan berbicara.")
-                    } else {
-                        // Tampilkan teks mentah dari server jika ada pesan lain
-                        onMessageReceived("Info: ${text.take(50)}")
                     }
                 } catch (e: Exception) {
-                    onMessageReceived("Parse Error: ${e.localizedMessage}")
+                    onMessageReceived("Error Parse: ${e.localizedMessage}")
                 }
             }
 
@@ -106,8 +98,14 @@ class WebSocketManager(
                 onMessageReceived("Memutar audio biner...")
             }
 
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                onMessageReceived("Koneksi ditutup: $reason (Kode: $code)")
+            }
+
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                onMessageReceived("Gagal: ${t.localizedMessage}")
+                val code = response?.code ?: 0
+                val message = response?.message ?: t.localizedMessage ?: "Tidak diketahui"
+                onMessageReceived("Gagal Terhubung! HTTP $code: $message")
             }
         })
     }
