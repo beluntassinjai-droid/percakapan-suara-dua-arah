@@ -31,17 +31,14 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
-    // Launcher untuk meminta izin mikrofon secara runtime
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        // Anda bisa menangani status izin di sini jika diperlukan
     }
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         
-        // Meminta izin RECORD_AUDIO saat aplikasi dibuka
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
@@ -73,14 +70,12 @@ fun LayarUtama() {
         Text(statusTeks)
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Tombol interaktif uji coba rekam suara
         Button(onClick = {
             if (!isRecording) {
                 isRecording = true
                 statusTeks = "Merekam suara..."
                 CoroutineScope(Dispatchers.IO).launch {
                     audioRecorder.startRecording { audioChunk ->
-                        // Di sinilah nanti data chunk audio PCM dikirim ke WebSocket AI
                     }
                 }
             } else {
@@ -89,7 +84,8 @@ fun LayarUtama() {
                 statusTeks = "Perekaman dihentikan. Template siap dikembangkan."
             }
         }) {
-            Text(if (isRecording) "Berhenti Bicara" ket { "Mulai Bicara" })
+            // Perbaikan sintaks tombol
+            Text(if (isRecording) "Berhenti Bicara" else "Mulai Bicara")
         }
     }
 }
