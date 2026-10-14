@@ -54,13 +54,11 @@ fun LayarUtama() {
         mutableStateOf(sharedPreferences.getString("GEMINI_API_KEY", "") ?: "")
     }
     
-    // Pilihan Model & Endpoint
+    // DAFTAR MODEL VERSI TERBARU (Versi 3 dan Live terkini)
     val daftarModel = listOf(
-        "models/gemini-2.0-flash-exp",
-        "models/gemini-2.0-flash",
-        "models/gemini-2.5-flash",
         "models/gemini-3.0-flash",
         "models/gemini-3.8-live",
+        "models/gemini-3.0-pro",
         "Kustom (Ketik Sendiri)"
     )
     
@@ -79,7 +77,6 @@ fun LayarUtama() {
 
     var webSocketManager by remember { mutableStateOf<WebSocketManager?>(null) }
 
-    // Dropdown state
     var modelExpanded by remember { mutableStateOf(false) }
     var endpointExpanded by remember { mutableStateOf(false) }
 
@@ -88,7 +85,7 @@ fun LayarUtama() {
     LaunchedEffect(apiKey, modelAktif, selectedEndpoint) {
         if (apiKey.isNotEmpty() && modelAktif.isNotEmpty()) {
             webSocketManager = WebSocketManager(apiKey, modelAktif, selectedEndpoint) { response ->
-                statusTeks = if (response.length > 50) "Respon: ${response.take(50)}..." else "Respon: $response"
+                statusTeks = response
             }
         }
     }
@@ -100,13 +97,12 @@ fun LayarUtama() {
         horizontalAlignment = Alignment.CenterHorizontally, 
         verticalArrangement = Arrangement.Center
     ) {
-        Text("percakapan suara dua arah", style = MaterialTheme.typography.headlineMedium)
+        Text("Percakapan Suara Dua Arah", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(8.dp))
         Text(statusTeks, modifier = Modifier.padding(horizontal = 16.dp))
         Spacer(modifier = Modifier.height(24.dp))
 
         if (tampilkanMenuPengaturan) {
-            // Input API Key
             OutlinedTextField(
                 value = inputKeySementara,
                 onValueChange = { inputKeySementara = it },
@@ -115,7 +111,6 @@ fun LayarUtama() {
             )
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Dropdown Pilih Endpoint (v1beta / v1alpha)
             ExposedDropdownMenuBox(
                 expanded = endpointExpanded,
                 onExpandedChange = { endpointExpanded = !endpointExpanded },
@@ -147,7 +142,6 @@ fun LayarUtama() {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Dropdown Pilih Model
             ExposedDropdownMenuBox(
                 expanded = modelExpanded,
                 onExpandedChange = { modelExpanded = !modelExpanded },
@@ -157,7 +151,7 @@ fun LayarUtama() {
                     value = selectedModel,
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Pilih Versi Model") },
+                    label = { Text("Pilih Versi Model Terbaru") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded) },
                     modifier = Modifier.menuAnchor().fillMaxWidth()
                 )
@@ -177,13 +171,12 @@ fun LayarUtama() {
                 }
             }
 
-            // Jika memilih Kustom, tampilkan kolom teks tambahan
             if (selectedModel == "Kustom (Ketik Sendiri)") {
                 Spacer(modifier = Modifier.height(12.dp))
                 OutlinedTextField(
                     value = customModelInput,
                     onValueChange = { customModelInput = it },
-                    label = { Text("Ketik Nama Model (cth: models/gemini-2.0-flash)") },
+                    label = { Text("Ketik Nama Model (cth: models/gemini-3.0-flash)") },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -212,7 +205,7 @@ fun LayarUtama() {
 
                 if (!isRecording) {
                     isRecording = true
-                    statusTeks = "Menghubungkan ke Gemini..."
+                    statusTeks = "Menghubungkan ke server..."
                     
                     webSocketManager?.connect()
 
