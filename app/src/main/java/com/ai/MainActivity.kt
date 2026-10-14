@@ -6,6 +6,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult // <-- Impor yang kurang
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,9 +26,8 @@ class MainActivity : ComponentActivity() {
         
         audioRecorder = AudioRecorder(this)
         
-        // Ganti dengan API Key dan model yang sesuai
         val apiKey = "YOUR_API_KEY"
-        val selectedModel = "gemini-2.0-flash-exp" // atau model live yang didukung
+        val selectedModel = "gemini-2.0-flash-exp"
         val selectedEndpoint = "v1alpha"
 
         setContent {
