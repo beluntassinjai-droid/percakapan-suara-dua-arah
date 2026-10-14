@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable 
 fun LayarUtama() {
     val context = LocalContext.current
@@ -53,19 +54,40 @@ fun LayarUtama() {
         mutableStateOf(sharedPreferences.getString("GEMINI_API_KEY", "") ?: "")
     }
     
+    // Pilihan Model & Endpoint
+    val daftarModel = listOf(
+        "models/gemini-2.0-flash-exp",
+        "models/gemini-2.0-flash",
+        "models/gemini-2.5-flash",
+        "models/gemini-3.0-flash",
+        "models/gemini-3.8-live",
+        "Kustom (Ketik Sendiri)"
+    )
+    
+    val daftarEndpoint = listOf("v1beta", "v1alpha")
+
+    var selectedModel by remember { mutableStateOf(sharedPreferences.getString("SELECTED_MODEL", daftarModel[0]) ?: daftarModel[0]) }
+    var selectedEndpoint by remember { mutableStateOf(sharedPreferences.getString("SELECTED_ENDPOINT", daftarEndpoint[0]) ?: daftarEndpoint[0]) }
+    
+    var customModelInput by remember { mutableStateOf(sharedPreferences.getString("CUSTOM_MODEL", "") ?: "") }
+    
     var inputKeySementara by remember { mutableStateOf(apiKey) }
     var tampilkanMenuPengaturan by remember { mutableStateOf(apiKey.isEmpty()) }
     
     var statusTeks by remember { mutableStateOf(if (apiKey.isEmpty()) "Silakan masukkan API Key terlebih dahulu." else "Siap merekam suara.") }
     var isRecording by remember { mutableStateOf(false) }
 
-    var webSocketManager by remember {
-        mutableStateOf<WebSocketManager?>(null)
-    }
+    var webSocketManager by remember { mutableStateOf<WebSocketManager?>(null) }
 
-    LaunchedEffect(apiKey) {
-        if (apiKey.isNotEmpty()) {
-            webSocketManager = WebSocketManager(apiKey) { response ->
+    // Dropdown state
+    var modelExpanded by remember { mutableStateOf(false) }
+    var endpointExpanded by remember { mutableStateOf(false) }
+
+    val modelAktif = if (selectedModel == "Kustom (Ketik Sendiri)") customModelInput else selectedModel
+
+    LaunchedEffect(apiKey, modelAktif, selectedEndpoint) {
+        if (apiKey.isNotEmpty() && modelAktif.isNotEmpty()) {
+            webSocketManager = WebSocketManager(apiKey, modelAktif, selectedEndpoint) { response ->
                 statusTeks = if (response.length > 50) "Respon: ${response.take(50)}..." else "Respon: $response"
             }
         }
@@ -84,6 +106,7 @@ fun LayarUtama() {
         Spacer(modifier = Modifier.height(24.dp))
 
         if (tampilkanMenuPengaturan) {
+            // Input API Key
             OutlinedTextField(
                 value = inputKeySementara,
                 onValueChange = { inputKeySementara = it },
@@ -91,13 +114,95 @@ fun LayarUtama() {
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(12.dp))
+
+            // Dropdown Pilih Endpoint (v1beta / v1alpha)
+            ExposedDropdownMenuBox(
+                expanded = endpointExpanded,
+                onExpandedChange = { endpointExpanded = !endpointExpanded },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = selectedEndpoint,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Pilih Endpoint API") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = endpointExpanded) },
+                    modifier = Modifier.menuAnchor().fillMaxWidth()
+                )
+                ExposedDropdownMenu(
+                    expanded = endpointExpanded,
+                    onBinding = {},
+                    onDismissRequest = { endpointExpanded = false }
+                ) {
+                    daftarEndpoint.forEach { endpoint ->
+                        DropdownMenuItem(
+                            text = { Text(endpoint) },
+                            onClick = {
+                                selectedEndpoint = endpoint
+                                endpointExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Dropdown Pilih Model
+            ExposedDropdownMenuBox(
+                expanded = modelExpanded,
+                onExpandedChange = { modelExpanded = !modelExpanded },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = selectedModel,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Pilih Versi Model") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded) },
+                    modifier = Modifier.menuAnchor().fillMaxWidth()
+                )
+                ExposedDropdownMenu(
+                    expanded = modelExpanded,
+                    onDismissRequest = { modelExpanded = false }
+                ) {
+                    daftarModel.forEach { model ->
+                        DropdownMenuItem(
+                            text = { Text(model) },
+                            onClick = {
+                                selectedModel = model
+                                modelExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Jika memilih Kustom, tampilkan kolom teks tambahan
+            if (selectedModel == "Kustom (Ketik Sendiri)") {
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = customModelInput,
+                    onValueChange = { customModelInput = it },
+                    label = { Text("Ketik Nama Model (cth: models/gemini-2.0-flash)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = {
                 apiKey = inputKeySementara
-                sharedPreferences.edit().putString("GEMINI_API_KEY", apiKey).apply()
+                sharedPreferences.edit()
+                    .putString("GEMINI_API_KEY", apiKey)
+                    .putString("SELECTED_MODEL", selectedModel)
+                    .putString("SELECTED_ENDPOINT", selectedEndpoint)
+                    .putString("CUSTOM_MODEL", customModelInput)
+                    .apply()
+                
                 tampilkanMenuPengaturan = false
-                statusTeks = "API Key disimpan. Siap merekam."
-            }) {
-                Text("Simpan API Key")
+                statusTeks = "Pengaturan disimpan. Siap merekam."
+            }, modifier = Modifier.fillMaxWidth()) {
+                Text("Simpan Pengaturan")
             }
         } else {
             Button(onClick = {
@@ -108,7 +213,7 @@ fun LayarUtama() {
 
                 if (!isRecording) {
                     isRecording = true
-                    statusTeks = "Menghubungkan & siap mendengarkan..."
+                    statusTeks = "Menghubungkan ke Gemini..."
                     
                     webSocketManager?.connect()
 
@@ -131,7 +236,7 @@ fun LayarUtama() {
             Spacer(modifier = Modifier.height(16.dp))
             
             TextButton(onClick = { tampilkanMenuPengaturan = true }) {
-                Text("Ubah API Key")
+                Text("Ubah Pengaturan & API Key")
             }
         }
     }
