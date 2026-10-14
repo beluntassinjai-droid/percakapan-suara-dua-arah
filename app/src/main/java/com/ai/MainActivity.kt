@@ -45,7 +45,6 @@ fun LayarUtama() {
     val context = LocalContext.current
     val audioRecorder = remember { AudioRecorder(context) }
     
-    // Mengambil SharedPreferences untuk menyimpan API Key
     val sharedPreferences = remember {
         context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
     }
@@ -64,11 +63,10 @@ fun LayarUtama() {
         mutableStateOf<WebSocketManager?>(null)
     }
 
-    // Inisialisasi WebSocketManager jika API Key sudah ada
     LaunchedEffect(apiKey) {
         if (apiKey.isNotEmpty()) {
             webSocketManager = WebSocketManager(apiKey) { response ->
-                statusTeks = if (response.length > 60) "Respon: ${response.take(60)}..." else "Respon: $response"
+                statusTeks = if (response.length > 50) "Respon: ${response.take(50)}..." else "Respon: $response"
             }
         }
     }
@@ -86,7 +84,6 @@ fun LayarUtama() {
         Spacer(modifier = Modifier.height(24.dp))
 
         if (tampilkanMenuPengaturan) {
-            // Tampilan Menu Pengaturan API Key
             OutlinedTextField(
                 value = inputKeySementara,
                 onValueChange = { inputKeySementara = it },
@@ -103,7 +100,6 @@ fun LayarUtama() {
                 Text("Simpan API Key")
             }
         } else {
-            // Tombol Utama Merekam
             Button(onClick = {
                 if (apiKey.isEmpty()) {
                     tampilkanMenuPengaturan = true
@@ -112,7 +108,7 @@ fun LayarUtama() {
 
                 if (!isRecording) {
                     isRecording = true
-                    statusTeks = "Menghubungkan ke Gemini Live..."
+                    statusTeks = "Menghubungkan & siap mendengarkan..."
                     
                     webSocketManager?.connect()
 
@@ -134,7 +130,6 @@ fun LayarUtama() {
 
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Tombol untuk membuka menu pengaturan API Key kembali
             TextButton(onClick = { tampilkanMenuPengaturan = true }) {
                 Text("Ubah API Key")
             }
