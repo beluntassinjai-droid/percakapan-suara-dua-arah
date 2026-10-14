@@ -28,7 +28,7 @@ class KtorWebSocketManager(
     private var session: DefaultClientWebSocketSession? = null
 
     init {
-        val sampleRate = 24000
+        val sampleRate = 24000 // Standar output audio dari Gemini Live
         val channelConfig = AudioFormat.CHANNEL_OUT_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
         val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat) * 2
@@ -70,10 +70,22 @@ class KtorWebSocketManager(
                     session = this
                     onMessageReceived("Terhubung! Mengirim setup...")
 
-                    val setupMessage = "{\"setup\":{\"model\":\"$selectedModel\"}}"
+                    // Format setup resmi yang meminta respons audio (MODALITAS AUDIO)
+                    val setupMessage = """
+                        {
+                            "setup": {
+                                "model": "$selectedModel",
+                                "generationConfig": {
+                                    "responseModalities": ["AUDIO"]
+                                }
+                            }
+                        }
+                    """.trimIndent()
+                    
                     send(Frame.Text(setupMessage))
                     onMessageReceived("Siap! Silakan berbicara.")
 
+                    // Menerima balasan dari server
                     for (frame in incoming) {
                         if (frame is Frame.Text) {
                             val text = frame.readText()
@@ -85,6 +97,7 @@ class KtorWebSocketManager(
                                     continue
                                 }
                                 
+                                // Memeriksa isi respons server yang membawa audio balik
                                 if (json.has("serverContent")) {
                                     val serverContent = json.getJSONObject("serverContent")
                                     if (serverContent.has("modelTurn")) {
@@ -105,10 +118,6 @@ class KtorWebSocketManager(
                             } catch (e: Exception) {
                                 // Abaikan
                             }
-                        } else if (frame is Frame.Binary) {
-                            val audioBytes = frame.readBytes()
-                            audioTrack?.write(audioBytes, 0, audioBytes.size)
-                            onMessageReceived("Memutar audio...")
                         }
                     }
                 }
@@ -122,7 +131,19 @@ class KtorWebSocketManager(
         scope?.launch {
             try {
                 val base64Audio = Base64.getEncoder().encodeToString(audioBytes)
-                val audioMessage = "{\"realtimeInput\":{\"mediaChunks\":[{\"mimeType\":\"audio/pcm\",\"data\":\"$base64Audio\"}]}}"
+                // Format kirim input audio real-time standar
+                val audioMessage = """
+                    {
+                        "realtimeInput": {
+                            "mediaChunks": [
+                                {
+                                    "mimeType": "audio/pcm",
+                                    "data": "$base64Audio"
+                                }
+                            ]
+                        }
+                    }
+                """.trimIndent()
                 session?.send(Frame.Text(audioMessage))
             } catch (e: Exception) {
                 // Abaikan
