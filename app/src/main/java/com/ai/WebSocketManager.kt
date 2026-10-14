@@ -4,7 +4,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import io.ktor.client.*
-import io.ktor.client.engine.cio.*
+import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.*
@@ -17,8 +17,10 @@ class KtorWebSocketManager(
     private val selectedEndpoint: String,
     private val onMessageReceived: (String) -> Unit
 ) {
-    private val client = HttpClient(CIO) {
-        install(WebSockets)
+    private val client = HttpClient(OkHttp) {
+        install(WebSockets) {
+            pingInterval = 20_000
+        }
     }
     
     private var scope: CoroutineScope? = null
@@ -68,12 +70,10 @@ class KtorWebSocketManager(
                     session = this
                     onMessageReceived("Terhubung! Mengirim setup...")
 
-                    // Kirim pesan setup pertama persis saat koneksi terbuka
                     val setupMessage = "{\"setup\":{\"model\":\"$selectedModel\"}}"
                     send(Frame.Text(setupMessage))
                     onMessageReceived("Siap! Silakan berbicara.")
 
-                    // Menerima balasan secara real-time dari server
                     for (frame in incoming) {
                         if (frame is Frame.Text) {
                             val text = frame.readText()
@@ -103,7 +103,7 @@ class KtorWebSocketManager(
                                     }
                                 }
                             } catch (e: Exception) {
-                                // Abaikan exception parse minor
+                                // Abaikan
                             }
                         } else if (frame is Frame.Binary) {
                             val audioBytes = frame.readBytes()
@@ -125,7 +125,7 @@ class KtorWebSocketManager(
                 val audioMessage = "{\"realtimeInput\":{\"mediaChunks\":[{\"mimeType\":\"audio/pcm\",\"data\":\"$base64Audio\"}]}}"
                 session?.send(Frame.Text(audioMessage))
             } catch (e: Exception) {
-                // Abaikan jika sesi terputus
+                // Abaikan
             }
         }
     }
