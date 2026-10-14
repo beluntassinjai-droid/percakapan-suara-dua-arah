@@ -2,6 +2,7 @@ package com.ai
 
 import okhttp3.*
 import okio.ByteString
+import java.util.Base64
 
 class WebSocketManager(private val url: String, private val onMessageReceived: (String) -> Unit) {
     private var webSocket: WebSocket? = null
@@ -10,6 +11,10 @@ class WebSocketManager(private val url: String, private val onMessageReceived: (
     fun connect() {
         val request = Request.Builder().url(url).build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                // Berhasil terhubung ke server
+            }
+
             override fun onMessage(webSocket: WebSocket, text: String) {
                 onMessageReceived(text)
             }
@@ -19,14 +24,15 @@ class WebSocketManager(private val url: String, private val onMessageReceived: (
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                t.printStackTrace()
+                onMessageReceived("Koneksi gagal: ${t.localizedMessage}")
             }
         })
     }
 
     fun sendAudioChunk(audioBytes: ByteArray) {
-        val byteString = ByteString.of(*audioBytes)
-        webSocket?.send(byteString)
+        // Mengubah ByteArray audio PCM ke format teks Base64 yang aman untuk WebSocket
+        val base64Audio = Base64.getEncoder().encodeToString(audioBytes)
+        webSocket?.send(base64Audio)
     }
 
     fun disconnect() {
