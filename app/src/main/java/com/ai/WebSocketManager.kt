@@ -51,17 +51,10 @@ class WebSocketManager(
         
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                onMessageReceived("Terhubung! Menginisialisasi model...")
+                onMessageReceived("Terhubung! Mengirim setup...")
                 
-                // Format setup standar untuk model versi 3+
-                val setupMessage = """
-                {
-                    "setup": {
-                        "model": "$selectedModel"
-                    }
-                }
-                """.trimIndent()
-                
+                // Pesan setup pertama dikirim sebagai JSON satu baris yang bersih tanpa karakter newline/spasi ekstra
+                val setupMessage = "{\"setup\":{\"model\":\"$selectedModel\"}}"
                 webSocket.send(setupMessage)
             }
 
@@ -116,18 +109,7 @@ class WebSocketManager(
 
     fun sendAudioChunk(audioBytes: ByteArray) {
         val base64Audio = Base64.getEncoder().encodeToString(audioBytes)
-        val audioMessage = """
-        {
-            "realtimeInput": {
-                "mediaChunks": [
-                    {
-                        "mimeType": "audio/pcm",
-                        "data": "$base64Audio"
-                    }
-                ]
-            }
-        }
-        """.trimIndent()
+        val audioMessage = "{\"realtimeInput\":{\"mediaChunks\":[{\"mimeType\":\"audio/pcm\",\"data\":\"$base64Audio\"}]}}"
         webSocket?.send(audioMessage)
     }
 
