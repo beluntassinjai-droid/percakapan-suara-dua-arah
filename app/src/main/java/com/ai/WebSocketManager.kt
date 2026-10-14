@@ -52,12 +52,22 @@ class WebSocketManager(
         
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                onMessageReceived("Terhubung ke Server. Mengirim setup...")
-                sendSetupMessage()
+                onMessageReceived("Terhubung! Mengirim setup awal...")
+                
+                // Format standar Google Gemini Live API untuk pesan setup pertama
+                val setupJson = JSONObject().apply {
+                    put("setup", JSONObject().apply {
+                        put("model", selectedModel)
+                        put("generationConfig", JSONObject().apply {
+                            put("responseModalities", arrayOf("AUDIO"))
+                        })
+                    })
+                }
+                
+                webSocket.send(setupJson.toString())
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                onMessageReceived("Pesan masuk: ${text.take(40)}")
                 try {
                     val json = JSONObject(text)
                     if (json.has("error")) {
@@ -86,9 +96,11 @@ class WebSocketManager(
                         }
                     } else if (json.has("setupComplete")) {
                         onMessageReceived("Siap! Silakan berbicara.")
+                    } else {
+                        onMessageReceived("Respon diterima dari server")
                     }
                 } catch (e: Exception) {
-                    onMessageReceived("Error Parse: ${e.localizedMessage}")
+                    onMessageReceived("Parse Error: ${e.localizedMessage}")
                 }
             }
 
@@ -110,35 +122,19 @@ class WebSocketManager(
         })
     }
 
-    private fun sendSetupMessage() {
-        val setupJson = """
-        {
-            "setup": {
-                "model": "$selectedModel",
-                "generationConfig": {
-                    "responseModalities": ["AUDIO"]
-                }
-            }
-        }
-        """.trimIndent()
-        webSocket?.send(setupJson)
-    }
-
     fun sendAudioChunk(audioBytes: ByteArray) {
         val base64Audio = Base64.getEncoder().encodeToString(audioBytes)
-        val audioJson = """
-        {
-            "realtimeInput": {
-                "mediaChunks": [
-                    {
-                        "mimeType": "audio/pcm",
-                        "data": "$base64Audio"
-                    }
-                ]
-            }
+        val audioJson = JSONObject().apply {
+            put("realtimeInput", JSONObject().apply {
+                put("mediaChunks", org.json.JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("mimeType", "audio/pcm")
+                        put("data", base64Audio)
+                    })
+                })
+            })
         }
-        """.trimIndent()
-        webSocket?.send(audioJson)
+        webSocket?.send(audioJson.toString())
     }
 
     fun disconnect() {
