@@ -25,8 +25,8 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { isGranted -> }
 
-    override fun onCreate(state: Bundle?) {
-        super.onCreate(state)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
         
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
@@ -54,7 +54,7 @@ fun LayarUtama() {
         mutableStateOf(sharedPreferences.getString("GEMINI_API_KEY", "") ?: "")
     }
     
-    // DAFTAR MODEL VERSI TERBARU (Versi 3 dan Live terkini)
+    // Daftar model versi terbaru (Versi 3 dan Live terkini)
     val daftarModel = listOf(
         "models/gemini-3.0-flash",
         "models/gemini-3.8-live",
@@ -66,7 +66,6 @@ fun LayarUtama() {
 
     var selectedModel by remember { mutableStateOf(sharedPreferences.getString("SELECTED_MODEL", daftarModel[0]) ?: daftarModel[0]) }
     var selectedEndpoint by remember { mutableStateOf(sharedPreferences.getString("SELECTED_ENDPOINT", daftarEndpoint[0]) ?: daftarEndpoint[0]) }
-    
     var customModelInput by remember { mutableStateOf(sharedPreferences.getString("CUSTOM_MODEL", "") ?: "") }
     
     var inputKeySementara by remember { mutableStateOf(apiKey) }
@@ -75,7 +74,7 @@ fun LayarUtama() {
     var statusTeks by remember { mutableStateOf(if (apiKey.isEmpty()) "Silakan masukkan API Key terlebih dahulu." else "Siap merekam suara.") }
     var isRecording by remember { mutableStateOf(false) }
 
-    var webSocketManager by remember { mutableStateOf<WebSocketManager?>(null) }
+    var ktorWebSocketManager by remember { mutableStateOf<KtorWebSocketManager?>(null) }
 
     var modelExpanded by remember { mutableStateOf(false) }
     var endpointExpanded by remember { mutableStateOf(false) }
@@ -84,7 +83,7 @@ fun LayarUtama() {
 
     LaunchedEffect(apiKey, modelAktif, selectedEndpoint) {
         if (apiKey.isNotEmpty() && modelAktif.isNotEmpty()) {
-            webSocketManager = WebSocketManager(apiKey, modelAktif, selectedEndpoint) { response ->
+            ktorWebSocketManager = KtorWebSocketManager(apiKey, modelAktif, selectedEndpoint) { response ->
                 statusTeks = response
             }
         }
@@ -205,19 +204,19 @@ fun LayarUtama() {
 
                 if (!isRecording) {
                     isRecording = true
-                    statusTeks = "Menghubungkan ke server..."
+                    statusTeks = "Menghubungkan..."
                     
-                    webSocketManager?.connect()
+                    ktorWebSocketManager?.connect()
 
                     CoroutineScope(Dispatchers.IO).launch {
                         audioRecorder.startRecording { audioChunk ->
-                            webSocketManager?.sendAudioChunk(audioChunk)
+                            ktorWebSocketManager?.sendAudioChunk(audioChunk)
                         }
                     }
                 } else {
                     isRecording = false
                     audioRecorder.stopRecording()
-                    webSocketManager?.disconnect()
+                    ktorWebSocketManager?.disconnect()
                     
                     statusTeks = "Perekaman dihentikan."
                 }
