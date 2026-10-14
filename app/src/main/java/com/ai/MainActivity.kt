@@ -55,11 +55,14 @@ fun LayarUtama() {
     val context = LocalContext.current
     val audioRecorder = remember { AudioRecorder(context) }
     
-    // Ganti URL di bawah ini dengan alamat server WebSocket AI Anda
-    val webSocketManager = remember { WebSocketManager("wss://echo.websocket.events") }
-    
-    var statusTeks by remember { mutableStateOf("Terhubung ke server. Siap merekam.") }
+    var statusTeks by remember { mutableStateOf("Siap merekam suara.") }
     var isRecording by remember { mutableStateOf(false) }
+
+    val webSocketManager = remember {
+        WebSocketManager("wss://echo.websocket.events") { response ->
+            statusTeks = "Respon AI: $response"
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -78,28 +81,17 @@ fun LayarUtama() {
                 isRecording = true
                 statusTeks = "Merekam & mengirim suara..."
                 
-                CoroutineScope(Dispatchers.IO).launch {
-                    // Hubungkan WebSocket terlebih dahulu
-                    webSocketManager.connect { response ->
-                        statusTeks = "Respon AI: $response"
-                    }
-                }
+                webSocketManager.connect()
 
                 CoroutineScope(Dispatchers.IO).launch {
                     audioRecorder.startRecording { audioChunk ->
-                        // Kirim potongan audio via WebSocket
-                        CoroutineScope(Dispatchers.IO).launch {
-                            webSocketManager.sendAudioChunk(audioChunk)
-                        }
+                        webSocketManager.sendAudioChunk(audioChunk)
                     }
                 }
             } else {
                 isRecording = false
                 audioRecorder.stopRecording()
-                
-                CoroutineScope(Dispatchers.IO).launch {
-                    webSocketManager.disconnect()
-                }
+                webSocketManager.disconnect()
                 
                 statusTeks = "Perekaman dihentikan."
             }
