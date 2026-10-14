@@ -3,13 +3,13 @@ package com.ai
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.util.Base64
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.*
 import org.json.JSONObject
-import java.util.Base64
 
 class KtorWebSocketManager(
     private val apiKey: String,
@@ -71,7 +71,6 @@ class KtorWebSocketManager(
                     session = this
                     onMessageReceived("Terhubung! Mengirim setup...")
 
-                    // Menggunakan model, endpoint, dan pilihan karakter suara dinamis dari dropdown
                     val setupMessage = """
                         {
                             "setup": {
@@ -118,7 +117,8 @@ class KtorWebSocketManager(
                                             if (part.has("inlineData")) {
                                                 val inlineData = part.getJSONObject("inlineData")
                                                 val base64Data = inlineData.getString("data")
-                                                val audioBytes = Base64.getDecoder().decode(base64Data)
+                                                // Menggunakan android.util.Base64 yang aman untuk Android
+                                                val audioBytes = Base64.decode(base64Data, Base64.NO_WRAP)
                                                 audioTrack?.write(audioBytes, 0, audioBytes.size)
                                                 onMessageReceived("Memutar suara AI...")
                                             }
@@ -126,7 +126,8 @@ class KtorWebSocketManager(
                                     }
                                 }
                             } catch (e: Exception) {
-                                // Abaikan parsing jika format lain
+                                // Ditangkap agar error parsing terlihat di UI jika format tidak sesuai
+                                onMessageReceived("Parse Error: ${e.localizedMessage}")
                             }
                         }
                     }
@@ -140,7 +141,8 @@ class KtorWebSocketManager(
     fun sendAudioChunk(audioBytes: ByteArray) {
         scope?.launch {
             try {
-                val base64Audio = Base64.getEncoder().encodeToString(audioBytes)
+                // Menggunakan android.util.Base64
+                val base64Audio = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
                 val audioMessage = """
                     {
                         "realtimeInput": {
@@ -155,7 +157,26 @@ class KtorWebSocketManager(
                 """.trimIndent()
                 session?.send(Frame.Text(audioMessage))
             } catch (e: Exception) {
-                // Abaikan
+                onMessageReceived("Gagal kirim audio: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    // Fungsi baru untuk mengirim sinyal selesai bicara ke server
+    fun sendEndOfturn() {
+        scope?.launch {
+            try {
+                val endMessage = """
+                    {
+                        "clientContent": {
+                            "turnComplete": true
+                        }
+                    }
+                """.trimIndent()
+                session?.send(Frame.Text(endMessage))
+                onMessageReceived("Selesai bicara, menunggu balasan AI...")
+            } catch (e: Exception) {
+                onMessageReceived("Gagal kirim end of turn: ${e.localizedMessage}")
             }
         }
     }
