@@ -3,8 +3,10 @@ package com.ai
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.util.Log
 import okhttp3.*
 import okio.ByteString
+import org.json.JSONObject
 import java.util.Base64
 
 class WebSocketManager(private val apiKey: String, private val onMessageReceived: (String) -> Unit) {
@@ -13,11 +15,11 @@ class WebSocketManager(private val apiKey: String, private val onMessageReceived
     private var audioTrack: AudioTrack? = null
 
     init {
-        // Konfigurasi pemutar AudioTrack untuk mendengarkan suara dari AI
-        val sampleRate = 24000 // Standar audio output Gemini Live
+        // Inisialisasi AudioTrack untuk output suara 24kHz PCM mono dari Gemini Live
+        val sampleRate = 24000
         val channelConfig = AudioFormat.CHANNEL_OUT_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-        val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+        val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat) * 2
 
         audioTrack = AudioTrack.Builder()
             .setAudioAttributes(
@@ -41,6 +43,7 @@ class WebSocketManager(private val apiKey: String, private val onMessageReceived
     }
 
     fun connect() {
+        // Menggunakan endpoint v1beta dan model gemini-3.8-live
         val url = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=$apiKey"
         val request = Request.Builder().url(url).build()
         
@@ -51,16 +54,44 @@ class WebSocketManager(private val apiKey: String, private val onMessageReceived
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                onMessageReceived(text)
-                // Jika server mengirim balasan dalam bentuk teks JSON yang berisi audio Base64,
-                // kita bisa ekstrak dan tulis ke audioTrack di sini jika diperlukan.
+                try {
+                    val json = JSONObject(text)
+                    
+                    // Memeriksa apakah server mengirimkan data audio balasan (ServerContent)
+                    if (json.has("serverContent")) {
+                        val serverContent = json.getJSONObject("serverContent")
+                        if (serverContent.has("modelTurn")) {
+                            val modelTurn = serverContent.getJSONObject("modelTurn")
+                            val parts = modelTurn.getJSONArray("parts")
+                            for (i in 0 until parts.length()) {
+                                val part = parts.getJSONObject(i)
+                                if (part.has("inlineData")) {
+                                    val inlineData = part.getJSONObject("inlineData")
+                                    val mimeType = inlineData.optString("mimeType", "")
+                                    if (mimeType.startsWith("audio/")) {
+                                        val base64Data = inlineData.getString("data")
+                                        val audioBytes = Base64.getDecoder().decode(base64Data)
+                                        
+                                        // Memutar data audio ke speaker
+                                        audioTrack?.write(audioBytes, 0, audioBytes.size)
+                                        onMessageReceived("Memutar suara dari Gemini...")
+                                        return
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    onMessageReceived("Respon diterima dari server")
+                } catch (e: Exception) {
+                    Log.e("WebSocket", "Gagal memproses pesan: ${e.localizedMessage}")
+                }
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                // Menerima data biner audio langsung dari server dan memutarnya ke speaker
                 val audioBytes = bytes.toByteArray()
                 audioTrack?.write(audioBytes, 0, audioBytes.size)
-                onMessageReceived("Memutar suara dari AI...")
+                onMessageReceived("Memutar data biner...")
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
