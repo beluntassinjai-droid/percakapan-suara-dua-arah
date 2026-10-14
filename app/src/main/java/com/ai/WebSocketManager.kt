@@ -88,7 +88,7 @@ class KtorWebSocketManager(
                     """.trimIndent()
                     send(Frame.Text(setupMessage))
 
-                    // 2. Komponen pemicu (trigger) teks awal agar AI langsung menyapa dan merespons suara
+                    // 2. Komponen pemicu (trigger) teks awal agar AI langsung menyapa
                     val triggerMessage = """
                         {
                             "clientContent": {
@@ -122,7 +122,7 @@ class KtorWebSocketManager(
                                     continue
                                 }
                                 
-                                // Memeriksa isi respons server yang membawa audio balik
+                                // Memeriksa isi respons server dan menampilkan teks/audio jika ada
                                 if (json.has("serverContent")) {
                                     val serverContent = json.getJSONObject("serverContent")
                                     if (serverContent.has("modelTurn")) {
@@ -130,12 +130,16 @@ class KtorWebSocketManager(
                                         val parts = modelTurn.getJSONArray("parts")
                                         for (i in 0 until parts.length()) {
                                             val part = parts.getJSONObject(i)
+                                            if (part.has("text")) {
+                                                val respText = part.getString("text")
+                                                onMessageReceived("AI: $respText")
+                                            }
                                             if (part.has("inlineData")) {
                                                 val inlineData = part.getJSONObject("inlineData")
                                                 val base64Data = inlineData.getString("data")
                                                 val audioBytes = Base64.getDecoder().decode(base64Data)
                                                 audioTrack?.write(audioBytes, 0, audioBytes.size)
-                                                onMessageReceived("Gemini sedang berbicara...")
+                                                onMessageReceived("Memutar audio AI...")
                                             }
                                         }
                                     }
