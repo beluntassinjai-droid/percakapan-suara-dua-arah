@@ -70,22 +70,47 @@ class KtorWebSocketManager(
                     session = this
                     onMessageReceived("Terhubung! Mengirim setup...")
 
-                    // Format setup resmi yang meminta respons audio (MODALITAS AUDIO)
+                    // 1. Konfigurasi setup lengkap dengan voiceConfig (Puck) dan responseModalities (AUDIO)
                     val setupMessage = """
                         {
                             "setup": {
                                 "model": "$selectedModel",
                                 "generationConfig": {
                                     "responseModalities": ["AUDIO"]
+                                },
+                                "voiceConfig": {
+                                    "prebuiltVoiceConfig": {
+                                        "voiceName": "Puck"
+                                    }
                                 }
                             }
                         }
                     """.trimIndent()
-                    
                     send(Frame.Text(setupMessage))
-                    onMessageReceived("Siap! Silakan berbicara.")
 
-                    // Menerima balasan dari server
+                    // 2. Komponen pemicu (trigger) teks awal agar AI langsung menyapa dan merespons suara
+                    val triggerMessage = """
+                        {
+                            "clientContent": {
+                                "turns": [
+                                    {
+                                        "role": "user",
+                                        "parts": [
+                                            {
+                                                "text": "Halo, sapa saya dengan suara singkat."
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "turnComplete": true
+                            }
+                        }
+                    """.trimIndent()
+                    send(Frame.Text(triggerMessage))
+                    
+                    onMessageReceived("Terhubung! Meminta respons AI...")
+
+                    // Menerima balasan dari server secara real-time
                     for (frame in incoming) {
                         if (frame is Frame.Text) {
                             val text = frame.readText()
@@ -131,7 +156,6 @@ class KtorWebSocketManager(
         scope?.launch {
             try {
                 val base64Audio = Base64.getEncoder().encodeToString(audioBytes)
-                // Format kirim input audio real-time standar
                 val audioMessage = """
                     {
                         "realtimeInput": {
