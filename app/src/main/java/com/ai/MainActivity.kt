@@ -54,7 +54,11 @@ class MainActivity : ComponentActivity() {
 fun LayarUtama() {
     val context = LocalContext.current
     val audioRecorder = remember { AudioRecorder(context) }
-    var statusTeks by remember { mutableStateOf("Template Jetpack Compose siap dikembangkan.") }
+    
+    // Ganti URL di bawah ini dengan alamat server WebSocket AI Anda
+    val webSocketManager = remember { WebSocketManager("wss://echo.websocket.events") }
+    
+    var statusTeks by remember { mutableStateOf("Terhubung ke server. Siap merekam.") }
     var isRecording by remember { mutableStateOf(false) }
 
     Column(
@@ -72,16 +76,32 @@ fun LayarUtama() {
         Button(onClick = {
             if (!isRecording) {
                 isRecording = true
-                statusTeks = "Merekam suara..."
+                statusTeks = "Merekam & mengirim suara..."
+                
+                CoroutineScope(Dispatchers.IO).launch {
+                    // Hubungkan WebSocket terlebih dahulu
+                    webSocketManager.connect { response ->
+                        statusTeks = "Respon AI: $response"
+                    }
+                }
+
                 CoroutineScope(Dispatchers.IO).launch {
                     audioRecorder.startRecording { audioChunk ->
-                        // Data audio siap dikirim ke AI
+                        // Kirim potongan audio via WebSocket
+                        CoroutineScope(Dispatchers.IO).launch {
+                            webSocketManager.sendAudioChunk(audioChunk)
+                        }
                     }
                 }
             } else {
                 isRecording = false
                 audioRecorder.stopRecording()
-                statusTeks = "Perekaman dihentikan. Template siap dikembangkan."
+                
+                CoroutineScope(Dispatchers.IO).launch {
+                    webSocketManager.disconnect()
+                }
+                
+                statusTeks = "Perekaman dihentikan."
             }
         }) {
             Text(if (isRecording) "Berhenti Bicara" else "Mulai Bicara")
