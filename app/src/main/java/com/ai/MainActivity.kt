@@ -131,7 +131,6 @@ fun LayarUtama() {
                 )
                 ExposedDropdownMenu(
                     expanded = endpointExpanded,
-                    onBinding = {},
                     onDismissRequest = { endpointExpanded = false }
                 ) {
                     daftarEndpoint.forEach { endpoint ->
