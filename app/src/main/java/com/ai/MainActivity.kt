@@ -30,14 +30,44 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var apiKey by remember { mutableStateOf(sharedPrefs.getString("api_key", "") ?: "") }
-            var selectedModel by remember { mutableStateOf(sharedPrefs.getString("model", "gemini-2.0-flash-exp") ?: "gemini-2.0-flash-exp") }
-            var selectedEndpoint by remember { mutableStateOf(sharedPrefs.getString("endpoint", "v1alpha") ?: "v1alpha") }
             
-            var statusText by remember { mutableStateOf("Silakan masukkan API Key") }
+            // Variabel Pengaturan
+            var selectedModel by remember { mutableStateOf(sharedPrefs.getString("model", "gemini-3.8-live") ?: "gemini-3.8-live") }
+            var selectedEndpoint by remember { mutableStateOf(sharedPrefs.getString("endpoint", "v1alpha") ?: "v1alpha") }
+            var selectedVoice by remember { mutableStateOf(sharedPrefs.getString("voice", "Puck") ?: "Puck") }
+            
+            var statusText by remember { mutableStateOf("Silakan masukkan API Key & Pengaturan") }
             var isConnected by remember { mutableStateOf(false) }
             var showSettings by remember { mutableStateOf(apiKey.isEmpty()) }
 
             val coroutineScope = rememberCoroutineScope()
+
+            // 1. Daftar Pilihan Model Versi 3
+            val modelList = listOf(
+                "gemini-3.8-live",
+                "gemini-3.8-live-extended-thinking",
+                "gemini-3.5-transcribe-live",
+                "gemini-3.5-live-translate-preview"
+            )
+            var expandedModel by remember { mutableStateOf(false) }
+
+            // 2. Daftar Pilihan Endpoint
+            val endpointList = listOf(
+                "v1alpha",
+                "v1beta",
+                "v1"
+            )
+            var expandedEndpoint by remember { mutableStateOf(false) }
+
+            // 3. Daftar Pilihan Karakter Suara (Voice Config)
+            val voiceList = listOf(
+                "Puck",
+                "Charon",
+                "Kore",
+                "Fenrir",
+                "Aoede"
+            )
+            var expandedVoice by remember { mutableStateOf(false) }
 
             val permissionLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestPermission()
@@ -48,6 +78,7 @@ class MainActivity : ComponentActivity() {
                         apiKey = apiKey,
                         selectedModel = selectedModel,
                         selectedEndpoint = selectedEndpoint,
+                        selectedVoice = selectedVoice,
                         onMessageReceived = { msg -> statusText = msg }
                     )
                     webSocketManager?.connect()
@@ -81,6 +112,7 @@ class MainActivity : ComponentActivity() {
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     if (showSettings) {
+                        // Input API Key
                         OutlinedTextField(
                             value = apiKey,
                             onValueChange = { apiKey = it },
@@ -89,22 +121,86 @@ class MainActivity : ComponentActivity() {
                             singleLine = true
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = selectedModel,
-                            onValueChange = { selectedModel = it },
-                            label = { Text("Model (mis: gemini-2.0-flash-exp)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
+                        
+                        // Dropdown 1: Model Versi 3
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { expandedModel = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Model: $selectedModel")
+                            }
+                            DropdownMenu(
+                                expanded = expandedModel,
+                                onDismissRequest = { expandedModel = false }
+                            ) {
+                                modelList.forEach { item ->
+                                    DropdownMenuItem(
+                                        text = { Text(item) },
+                                        onClick = {
+                                            selectedModel = item
+                                            expandedModel = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = selectedEndpoint,
-                            onValueChange = { selectedEndpoint = it },
-                            label = { Text("Endpoint (mis: v1alpha)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
+
+                        // Dropdown 2: Endpoint
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { expandedEndpoint = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Endpoint: $selectedEndpoint")
+                            }
+                            DropdownMenu(
+                                expanded = expandedEndpoint,
+                                onDismissRequest = { expandedEndpoint = false }
+                            ) {
+                                endpointList.forEach { item ->
+                                    DropdownMenuItem(
+                                        text = { Text(item) },
+                                        onClick = {
+                                            selectedEndpoint = item
+                                            expandedEndpoint = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Dropdown 3: Karakter Suara (Voice Config)
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { expandedVoice = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Suara AI: $selectedVoice")
+                            }
+                            DropdownMenu(
+                                expanded = expandedVoice,
+                                onDismissRequest = { expandedVoice = false }
+                            ) {
+                                voiceList.forEach { item ->
+                                    DropdownMenuItem(
+                                        text = { Text(item) },
+                                        onClick = {
+                                            selectedVoice = item
+                                            expandedVoice = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(16.dp))
+
+                        // Tombol Simpan
                         Button(
                             onClick = {
                                 if (apiKey.isNotBlank()) {
@@ -112,6 +208,7 @@ class MainActivity : ComponentActivity() {
                                         .putString("api_key", apiKey)
                                         .putString("model", selectedModel)
                                         .putString("endpoint", selectedEndpoint)
+                                        .putString("voice", selectedVoice)
                                         .apply()
                                     showSettings = false
                                     statusText = "Pengaturan disimpan"
@@ -142,6 +239,7 @@ class MainActivity : ComponentActivity() {
                                             apiKey = apiKey,
                                             selectedModel = selectedModel,
                                             selectedEndpoint = selectedEndpoint,
+                                            selectedVoice = selectedVoice,
                                             onMessageReceived = { msg -> statusText = msg }
                                         )
                                         webSocketManager?.connect()
