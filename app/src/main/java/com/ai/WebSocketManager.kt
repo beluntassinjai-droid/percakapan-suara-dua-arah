@@ -3,7 +3,6 @@ package com.ai
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
-import android.util.Log
 import okhttp3.*
 import okio.ByteString
 import org.json.JSONObject
@@ -48,6 +47,7 @@ class WebSocketManager(
 
     fun connect() {
         val url = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.$selectedEndpoint.GenerativeService.BidiGenerateContent?key=$apiKey"
+        
         val request = Request.Builder().url(url).build()
         
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
@@ -59,6 +59,14 @@ class WebSocketManager(
             override fun onMessage(webSocket: WebSocket, text: String) {
                 try {
                     val json = JSONObject(text)
+                    
+                    // Cek jika server mengirimkan error
+                    if (json.has("error")) {
+                        val errorObj = json.getJSONObject("error")
+                        val message = errorObj.optString("message", "Error tidak dikenal")
+                        onMessageReceived("Server Error: $message")
+                        return
+                    }
                     
                     if (json.has("serverContent")) {
                         val serverContent = json.getJSONObject("serverContent")
@@ -75,7 +83,7 @@ class WebSocketManager(
                                         val audioBytes = Base64.getDecoder().decode(base64Data)
                                         
                                         audioTrack?.write(audioBytes, 0, audioBytes.size)
-                                        onMessageReceived("Gemini sedang berbicara...")
+                                        onMessageReceived("Memutar suara AI...")
                                         return
                                     }
                                 }
@@ -84,21 +92,22 @@ class WebSocketManager(
                     } else if (json.has("setupComplete")) {
                         onMessageReceived("Siap! Silakan berbicara.")
                     } else {
-                        onMessageReceived("Respon diterima")
+                        // Tampilkan teks mentah dari server jika ada pesan lain
+                        onMessageReceived("Info: ${text.take(50)}")
                     }
                 } catch (e: Exception) {
-                    Log.e("WebSocket", "Gagal memproses pesan: ${e.localizedMessage}")
+                    onMessageReceived("Parse Error: ${e.localizedMessage}")
                 }
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                 val audioBytes = bytes.toByteArray()
                 audioTrack?.write(audioBytes, 0, audioBytes.size)
-                onMessageReceived("Memutar audio...")
+                onMessageReceived("Memutar audio biner...")
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                onMessageReceived("Koneksi gagal: ${t.localizedMessage}")
+                onMessageReceived("Gagal: ${t.localizedMessage}")
             }
         })
     }
