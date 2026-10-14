@@ -43,7 +43,6 @@ class AudioRecorder(private val context: Context) {
             audioRecord?.startRecording()
             isRecording = true
 
-            // Jalankan di background coroutine terpisah agar tidak memblokir UI
             recordingJob = CoroutineScope(Dispatchers.IO).launch {
                 val buffer = ByteArray(bufferSize)
                 while (isRecording && isActive) {
