@@ -58,6 +58,7 @@ fun LayarUtama() {
     var statusTeks by remember { mutableStateOf("Siap merekam suara.") }
     var isRecording by remember { mutableStateOf(false) }
 
+    // CATATAN: Ganti URL di bawah ini dengan WebSocket server AI Anda yang sebenarnya
     val webSocketManager = remember {
         WebSocketManager("wss://echo.websocket.events") { response ->
             statusTeks = "Respon AI: $response"
@@ -79,7 +80,7 @@ fun LayarUtama() {
         Button(onClick = {
             if (!isRecording) {
                 isRecording = true
-                statusTeks = "Merekam & mengirim suara..."
+                statusTeks = "Merekam & mengirim data Base64..."
                 
                 webSocketManager.connect()
 
