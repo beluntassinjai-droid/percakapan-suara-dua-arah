@@ -9,13 +9,17 @@ import okio.ByteString
 import org.json.JSONObject
 import java.util.Base64
 
-class WebSocketManager(private val apiKey: String, private val onMessageReceived: (String) -> Unit) {
+class WebSocketManager(
+    private val apiKey: String,
+    private val selectedModel: String,
+    private val selectedEndpoint: String,
+    private val onMessageReceived: (String) -> Unit
+) {
     private var webSocket: WebSocket? = null
     private val client = OkHttpClient()
     private var audioTrack: AudioTrack? = null
 
     init {
-        // Inisialisasi AudioTrack untuk output suara 24kHz PCM mono dari Gemini Live
         val sampleRate = 24000
         val channelConfig = AudioFormat.CHANNEL_OUT_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
@@ -43,13 +47,12 @@ class WebSocketManager(private val apiKey: String, private val onMessageReceived
     }
 
     fun connect() {
-        // Menggunakan endpoint v1beta dan model gemini-3.8-live
-        val url = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=$apiKey"
+        val url = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.$selectedEndpoint.GenerativeService.BidiGenerateContent?key=$apiKey"
         val request = Request.Builder().url(url).build()
         
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                onMessageReceived("Terhubung ke Gemini Live!")
+                onMessageReceived("Terhubung! Mengirim setup...")
                 sendSetupMessage()
             }
 
@@ -57,7 +60,6 @@ class WebSocketManager(private val apiKey: String, private val onMessageReceived
                 try {
                     val json = JSONObject(text)
                     
-                    // Memeriksa apakah server mengirimkan data audio balasan (ServerContent)
                     if (json.has("serverContent")) {
                         val serverContent = json.getJSONObject("serverContent")
                         if (serverContent.has("modelTurn")) {
@@ -72,17 +74,18 @@ class WebSocketManager(private val apiKey: String, private val onMessageReceived
                                         val base64Data = inlineData.getString("data")
                                         val audioBytes = Base64.getDecoder().decode(base64Data)
                                         
-                                        // Memutar data audio ke speaker
                                         audioTrack?.write(audioBytes, 0, audioBytes.size)
-                                        onMessageReceived("Memutar suara dari Gemini...")
+                                        onMessageReceived("Gemini sedang berbicara...")
                                         return
                                     }
                                 }
                             }
                         }
+                    } else if (json.has("setupComplete")) {
+                        onMessageReceived("Siap! Silakan berbicara.")
+                    } else {
+                        onMessageReceived("Respon diterima")
                     }
-                    
-                    onMessageReceived("Respon diterima dari server")
                 } catch (e: Exception) {
                     Log.e("WebSocket", "Gagal memproses pesan: ${e.localizedMessage}")
                 }
@@ -91,7 +94,7 @@ class WebSocketManager(private val apiKey: String, private val onMessageReceived
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                 val audioBytes = bytes.toByteArray()
                 audioTrack?.write(audioBytes, 0, audioBytes.size)
-                onMessageReceived("Memutar data biner...")
+                onMessageReceived("Memutar audio...")
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -104,7 +107,7 @@ class WebSocketManager(private val apiKey: String, private val onMessageReceived
         val setupJson = """
         {
             "setup": {
-                "model": "models/gemini-3.8-live",
+                "model": "$selectedModel",
                 "generationConfig": {
                     "responseModalities": ["AUDIO"]
                 }
