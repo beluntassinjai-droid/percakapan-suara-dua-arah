@@ -33,8 +33,7 @@ class MainActivity : ComponentActivity() {
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-    }
+    ) { isGranted -> }
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
@@ -76,6 +75,7 @@ fun LayarUtama() {
                 statusTeks = "Merekam suara..."
                 CoroutineScope(Dispatchers.IO).launch {
                     audioRecorder.startRecording { audioChunk ->
+                        // Data audio siap dikirim ke AI
                     }
                 }
             } else {
@@ -84,7 +84,6 @@ fun LayarUtama() {
                 statusTeks = "Perekaman dihentikan. Template siap dikembangkan."
             }
         }) {
-            // Perbaikan sintaks tombol
             Text(if (isRecording) "Berhenti Bicara" else "Mulai Bicara")
         }
     }
