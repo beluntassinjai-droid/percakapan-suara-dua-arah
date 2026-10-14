@@ -15,6 +15,7 @@ class KtorWebSocketManager(
     private val apiKey: String,
     private val selectedModel: String,
     private val selectedEndpoint: String,
+    private val selectedVoice: String,
     private val onMessageReceived: (String) -> Unit
 ) {
     private val client = HttpClient(OkHttp) {
@@ -28,7 +29,7 @@ class KtorWebSocketManager(
     private var session: DefaultClientWebSocketSession? = null
 
     init {
-        val sampleRate = 24000 
+        val sampleRate = 24000
         val channelConfig = AudioFormat.CHANNEL_OUT_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
         val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat) * 2
@@ -70,78 +71,62 @@ class KtorWebSocketManager(
                     session = this
                     onMessageReceived("Terhubung! Mengirim setup...")
 
+                    // Menggunakan model, endpoint, dan pilihan karakter suara dinamis dari dropdown
                     val setupMessage = """
                         {
                             "setup": {
-                                "model": "$selectedModel",
+                                "model": "models/$selectedModel",
                                 "generationConfig": {
                                     "responseModalities": ["AUDIO"]
                                 },
                                 "voiceConfig": {
                                     "prebuiltVoiceConfig": {
-                                        "voiceName": "Puck"
+                                        "voiceName": "$selectedVoice"
                                     }
                                 }
                             }
                         }
                     """.trimIndent()
                     send(Frame.Text(setupMessage))
-
-                    val triggerMessage = """
-                        {
-                            "clientContent": {
-                                "turns": [
-                                    {
-                                        "role": "user",
-                                        "parts": [
-                                            {
-                                                "text": "Halo, sapa saya dengan suara singkat."
-                                            }
-                                        ]
-                                    }
-                                ],
-                                "turnComplete": true
-                            }
-                        }
-                    """.trimIndent()
-                    send(Frame.Text(triggerMessage))
                     
-                    onMessageReceived("Terhubung! Meminta respons AI...")
+                    onMessageReceived("Menunggu respons server suara...")
 
                     for (frame in incoming) {
                         if (frame is Frame.Text) {
                             val text = frame.readText()
                             try {
                                 val json = JSONObject(text)
+                                
                                 if (json.has("error")) {
-                                    val err = json.getJSONObject("error").optString("message", "Error")
-                                    onMessageReceived("API Error: $err")
+                                    val errObj = json.getJSONObject("error")
+                                    val errMsg = errObj.optString("message", "Unknown error")
+                                    onMessageReceived("Server Error: $errMsg")
                                     continue
                                 }
                                 
                                 if (json.has("serverContent")) {
                                     val serverContent = json.getJSONObject("serverContent")
+                                    
                                     if (serverContent.has("modelTurn")) {
                                         val modelTurn = serverContent.getJSONObject("modelTurn")
                                         val parts = modelTurn.getJSONArray("parts")
                                         for (i in 0 until parts.length()) {
                                             val part = parts.getJSONObject(i)
                                             if (part.has("text")) {
-                                                val respText = part.getString("text")
-                                                onMessageReceived("AI: $respText")
+                                                onMessageReceived("AI: ${part.getString("text")}")
                                             }
                                             if (part.has("inlineData")) {
                                                 val inlineData = part.getJSONObject("inlineData")
                                                 val base64Data = inlineData.getString("data")
                                                 val audioBytes = Base64.getDecoder().decode(base64Data)
                                                 audioTrack?.write(audioBytes, 0, audioBytes.size)
-                                                onMessageReceived("Memutar audio AI...")
+                                                onMessageReceived("Memutar suara AI...")
                                             }
                                         }
                                     }
                                 }
                             } catch (e: Exception) {
-                                // Abaikan
+                                // Abaikan parsing jika format lain
                             }
                         }
                     }
