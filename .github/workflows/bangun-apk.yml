@@ -17,7 +17,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Ekstrak ZIP proyek
-        run: for z in *.zip; do [ -f "$z" ] && unzip -o "$z"; done
+        run: |
+          shopt -s nullglob
+          for z in *.zip; do
+            [ -f "$z" ] && unzip -o "$z"
+          done
 
       - name: Pasang Java 17
         uses: actions/setup-java@v4
