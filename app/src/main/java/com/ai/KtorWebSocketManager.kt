@@ -28,7 +28,7 @@ class KtorWebSocketManager(
     private var session: DefaultClientWebSocketSession? = null
 
     init {
-        val sampleRate = 24000 // Standar output audio dari Gemini Live
+        val sampleRate = 24000 
         val channelConfig = AudioFormat.CHANNEL_OUT_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
         val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat) * 2
@@ -70,7 +70,6 @@ class KtorWebSocketManager(
                     session = this
                     onMessageReceived("Terhubung! Mengirim setup...")
 
-                    // 1. Konfigurasi setup lengkap dengan voiceConfig (Puck) dan responseModalities (AUDIO)
                     val setupMessage = """
                         {
                             "setup": {
@@ -88,7 +87,6 @@ class KtorWebSocketManager(
                     """.trimIndent()
                     send(Frame.Text(setupMessage))
 
-                    // 2. Komponen pemicu (trigger) teks awal agar AI langsung menyapa
                     val triggerMessage = """
                         {
                             "clientContent": {
@@ -110,7 +108,6 @@ class KtorWebSocketManager(
                     
                     onMessageReceived("Terhubung! Meminta respons AI...")
 
-                    // Menerima balasan dari server secara real-time
                     for (frame in incoming) {
                         if (frame is Frame.Text) {
                             val text = frame.readText()
@@ -122,7 +119,6 @@ class KtorWebSocketManager(
                                     continue
                                 }
                                 
-                                // Memeriksa isi respons server dan menampilkan teks/audio jika ada
                                 if (json.has("serverContent")) {
                                     val serverContent = json.getJSONObject("serverContent")
                                     if (serverContent.has("modelTurn")) {
