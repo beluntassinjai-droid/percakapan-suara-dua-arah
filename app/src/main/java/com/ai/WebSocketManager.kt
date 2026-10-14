@@ -47,30 +47,30 @@ class WebSocketManager(
 
     fun connect() {
         val url = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.$selectedEndpoint.GenerativeService.BidiGenerateContent?key=$apiKey"
-        
         val request = Request.Builder().url(url).build()
         
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                onMessageReceived("Terhubung! Mengirim setup...")
+                onMessageReceived("Terhubung! Menginisialisasi model...")
                 
-                // Setup disederhanakan agar tidak terjadi error format generationConfig
-                val setupJson = JSONObject().apply {
-                    put("setup", JSONObject().apply {
-                        put("model", selectedModel)
-                    })
+                // Format setup standar untuk model versi 3+
+                val setupMessage = """
+                {
+                    "setup": {
+                        "model": "$selectedModel"
+                    }
                 }
+                """.trimIndent()
                 
-                webSocket.send(setupJson.toString())
+                webSocket.send(setupMessage)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 try {
                     val json = JSONObject(text)
                     if (json.has("error")) {
-                        val errorObj = json.getJSONObject("error")
-                        val message = errorObj.optString("message", "Error")
-                        onMessageReceived("API Error: $message")
+                        val err = json.getJSONObject("error").optString("message", "Terjadi kesalahan")
+                        onMessageReceived("Error: $err")
                         return
                     }
                     
@@ -82,29 +82,26 @@ class WebSocketManager(
                             for (i in 0 until parts.length()) {
                                 val part = parts.getJSONObject(i)
                                 if (part.has("inlineData")) {
-                                    val inlineData = part.getJSONObject("inlineData")
-                                    val base64Data = inlineData.getString("data")
+                                    val base64Data = part.getJSONObject("inlineData").getString("data")
                                     val audioBytes = Base64.getDecoder().decode(base64Data)
                                     audioTrack?.write(audioBytes, 0, audioBytes.size)
-                                    onMessageReceived("Memutar suara AI...")
+                                    onMessageReceived("Gemini sedang berbicara...")
                                     return
                                 }
                             }
                         }
-                    } else if (json.has("setupComplete")) {
-                        onMessageReceived("Siap! Silakan berbicara.")
                     } else {
                         onMessageReceived("Siap! Silakan berbicara.")
                     }
                 } catch (e: Exception) {
-                    onMessageReceived("Parse Error: ${e.localizedMessage}")
+                    onMessageReceived("Siap! Silakan berbicara.")
                 }
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                 val audioBytes = bytes.toByteArray()
                 audioTrack?.write(audioBytes, 0, audioBytes.size)
-                onMessageReceived("Memutar audio biner...")
+                onMessageReceived("Memutar audio...")
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -112,26 +109,26 @@ class WebSocketManager(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                val code = response?.code ?: 0
-                val message = response?.message ?: t.localizedMessage ?: "Tidak diketahui"
-                onMessageReceived("Gagal: HTTP $code - $message")
+                onMessageReceived("Koneksi gagal: ${t.localizedMessage}")
             }
         })
     }
 
     fun sendAudioChunk(audioBytes: ByteArray) {
         val base64Audio = Base64.getEncoder().encodeToString(audioBytes)
-        val audioJson = JSONObject().apply {
-            put("realtimeInput", JSONObject().apply {
-                put("mediaChunks", org.json.JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("mimeType", "audio/pcm")
-                        put("data", base64Audio)
-                    })
-                })
-            })
+        val audioMessage = """
+        {
+            "realtimeInput": {
+                "mediaChunks": [
+                    {
+                        "mimeType": "audio/pcm",
+                        "data": "$base64Audio"
+                    }
+                ]
+            }
         }
-        webSocket?.send(audioJson.toString())
+        """.trimIndent()
+        webSocket?.send(audioMessage)
     }
 
     fun disconnect() {
