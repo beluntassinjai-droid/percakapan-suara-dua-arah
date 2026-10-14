@@ -3,20 +3,27 @@ package com.ai
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
-import okhttp3.*
-import okio.ByteString
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.websocket.*
+import io.ktor.websocket.*
+import kotlinx.coroutines.*
 import org.json.JSONObject
 import java.util.Base64
 
-class WebSocketManager(
+class KtorWebSocketManager(
     private val apiKey: String,
     private val selectedModel: String,
     private val selectedEndpoint: String,
     private val onMessageReceived: (String) -> Unit
 ) {
-    private var webSocket: WebSocket? = null
-    private val client = OkHttpClient()
+    private val client = HttpClient(CIO) {
+        install(WebSockets)
+    }
+    
+    private var scope: CoroutineScope? = null
     private var audioTrack: AudioTrack? = null
+    private var session: DefaultClientWebSocketSession? = null
 
     init {
         val sampleRate = 24000
@@ -46,78 +53,94 @@ class WebSocketManager(
     }
 
     fun connect() {
-        val url = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.$selectedEndpoint.GenerativeService.BidiGenerateContent?key=$apiKey"
-        val request = Request.Builder().url(url).build()
-        
-        webSocket = client.newWebSocket(request, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                onMessageReceived("Terhubung! Mengirim setup...")
+        scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        scope?.launch {
+            try {
+                onMessageReceived("Menghubungkan ke Gemini Live...")
                 
-                // Pesan setup pertama dikirim sebagai JSON satu baris yang bersih tanpa karakter newline/spasi ekstra
-                val setupMessage = "{\"setup\":{\"model\":\"$selectedModel\"}}"
-                webSocket.send(setupMessage)
-            }
+                val host = "generativelanguage.googleapis.com"
+                val path = "/ws/google.ai.generativelanguage.$selectedEndpoint.GenerativeService.BidiGenerateContent"
+                
+                client.wss(
+                    host = host,
+                    path = "$path?key=$apiKey"
+                ) {
+                    session = this
+                    onMessageReceived("Terhubung! Mengirim setup...")
 
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                try {
-                    val json = JSONObject(text)
-                    if (json.has("error")) {
-                        val err = json.getJSONObject("error").optString("message", "Terjadi kesalahan")
-                        onMessageReceived("Error: $err")
-                        return
-                    }
-                    
-                    if (json.has("serverContent")) {
-                        val serverContent = json.getJSONObject("serverContent")
-                        if (serverContent.has("modelTurn")) {
-                            val modelTurn = serverContent.getJSONObject("modelTurn")
-                            val parts = modelTurn.getJSONArray("parts")
-                            for (i in 0 until parts.length()) {
-                                val part = parts.getJSONObject(i)
-                                if (part.has("inlineData")) {
-                                    val base64Data = part.getJSONObject("inlineData").getString("data")
-                                    val audioBytes = Base64.getDecoder().decode(base64Data)
-                                    audioTrack?.write(audioBytes, 0, audioBytes.size)
-                                    onMessageReceived("Gemini sedang berbicara...")
-                                    return
-                                }
-                            }
-                        }
-                    } else {
-                        onMessageReceived("Siap! Silakan berbicara.")
-                    }
-                } catch (e: Exception) {
+                    // Kirim pesan setup pertama persis saat koneksi terbuka
+                    val setupMessage = "{\"setup\":{\"model\":\"$selectedModel\"}}"
+                    send(Frame.Text(setupMessage))
                     onMessageReceived("Siap! Silakan berbicara.")
+
+                    // Menerima balasan secara real-time dari server
+                    for (frame in incoming) {
+                        if (frame is Frame.Text) {
+                            val text = frame.readText()
+                            try {
+                                val json = JSONObject(text)
+                                if (json.has("error")) {
+                                    val err = json.getJSONObject("error").optString("message", "Error")
+                                    onMessageReceived("API Error: $err")
+                                    continue
+                                }
+                                
+                                if (json.has("serverContent")) {
+                                    val serverContent = json.getJSONObject("serverContent")
+                                    if (serverContent.has("modelTurn")) {
+                                        val modelTurn = serverContent.getJSONObject("modelTurn")
+                                        val parts = modelTurn.getJSONArray("parts")
+                                        for (i in 0 until parts.length()) {
+                                            val part = parts.getJSONObject(i)
+                                            if (part.has("inlineData")) {
+                                                val inlineData = part.getJSONObject("inlineData")
+                                                val base64Data = inlineData.getString("data")
+                                                val audioBytes = Base64.getDecoder().decode(base64Data)
+                                                audioTrack?.write(audioBytes, 0, audioBytes.size)
+                                                onMessageReceived("Gemini sedang berbicara...")
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                // Abaikan exception parse minor
+                            }
+                        } else if (frame is Frame.Binary) {
+                            val audioBytes = frame.readBytes()
+                            audioTrack?.write(audioBytes, 0, audioBytes.size)
+                            onMessageReceived("Memutar audio...")
+                        }
+                    }
                 }
+            } catch (e: Exception) {
+                onMessageReceived("Koneksi gagal: ${e.localizedMessage}")
             }
-
-            override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                val audioBytes = bytes.toByteArray()
-                audioTrack?.write(audioBytes, 0, audioBytes.size)
-                onMessageReceived("Memutar audio...")
-            }
-
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                onMessageReceived("Koneksi ditutup: $reason")
-            }
-
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                onMessageReceived("Koneksi gagal: ${t.localizedMessage}")
-            }
-        })
+        }
     }
 
     fun sendAudioChunk(audioBytes: ByteArray) {
-        val base64Audio = Base64.getEncoder().encodeToString(audioBytes)
-        val audioMessage = "{\"realtimeInput\":{\"mediaChunks\":[{\"mimeType\":\"audio/pcm\",\"data\":\"$base64Audio\"}]}}"
-        webSocket?.send(audioMessage)
+        scope?.launch {
+            try {
+                val base64Audio = Base64.getEncoder().encodeToString(audioBytes)
+                val audioMessage = "{\"realtimeInput\":{\"mediaChunks\":[{\"mimeType\":\"audio/pcm\",\"data\":\"$base64Audio\"}]}}"
+                session?.send(Frame.Text(audioMessage))
+            } catch (e: Exception) {
+                // Abaikan jika sesi terputus
+            }
+        }
     }
 
     fun disconnect() {
+        scope?.cancel()
+        scope = null
+        
         audioTrack?.stop()
         audioTrack?.release()
         audioTrack = null
-        webSocket?.close(1000, "Selesai")
-        webSocket = null
+        
+        runBlocking {
+            session?.close()
+        }
+        session = null
     }
 }
