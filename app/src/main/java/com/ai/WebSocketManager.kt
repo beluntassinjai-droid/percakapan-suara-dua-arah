@@ -4,15 +4,20 @@ import okhttp3.*
 import okio.ByteString
 import java.util.Base64
 
-class WebSocketManager(private val url: String, private val onMessageReceived: (String) -> Unit) {
+class WebSocketManager(private val apiKey: String, private val onMessageReceived: (String) -> Unit) {
     private var webSocket: WebSocket? = null
     private val client = OkHttpClient()
 
     fun connect() {
+        // Menggunakan endpoint Gemini Live BidiGenerateContent dengan model yang ditentukan
+        val url = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=$apiKey"
         val request = Request.Builder().url(url).build()
+        
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                // Berhasil terhubung ke server
+                onMessageReceived("Terhubung ke Gemini Live!")
+                // Kirim pesan setup awal untuk konfigurasi model (opsional/standar)
+                sendSetupMessage()
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -20,7 +25,7 @@ class WebSocketManager(private val url: String, private val onMessageReceived: (
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                onMessageReceived(bytes.utf8())
+                onMessageReceived("Menerima data biner dari server")
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -29,10 +34,36 @@ class WebSocketManager(private val url: String, private val onMessageReceived: (
         })
     }
 
+    private fun sendSetupMessage() {
+        val setupJson = """
+        {
+            "setup": {
+                "model": "models/gemini-3.8-live",
+                "generationConfig": {
+                    "responseModalities": ["AUDIO"]
+                }
+            }
+        }
+        """.trimIndent()
+        webSocket?.send(setupJson)
+    }
+
     fun sendAudioChunk(audioBytes: ByteArray) {
-        // Mengubah ByteArray audio PCM ke format teks Base64 yang aman untuk WebSocket
         val base64Audio = Base64.getEncoder().encodeToString(audioBytes)
-        webSocket?.send(base64Audio)
+        // Membungkus chunk audio PCM ke dalam format real-time input Gemini API
+        val audioJson = """
+        {
+            "realtimeInput": {
+                "mediaChunks": [
+                    {
+                        "mimeType": "audio/pcm",
+                        "data": "$base64Audio"
+                    }
+                ]
+            }
+        }
+        """.trimIndent()
+        webSocket?.send(audioJson)
     }
 
     fun disconnect() {
