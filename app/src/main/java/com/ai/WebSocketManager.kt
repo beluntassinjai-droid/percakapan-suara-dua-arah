@@ -52,15 +52,12 @@ class WebSocketManager(
         
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                onMessageReceived("Terhubung! Mengirim setup awal...")
+                onMessageReceived("Terhubung! Mengirim setup...")
                 
-                // Format standar Google Gemini Live API untuk pesan setup pertama
+                // Setup disederhanakan agar tidak terjadi error format generationConfig
                 val setupJson = JSONObject().apply {
                     put("setup", JSONObject().apply {
                         put("model", selectedModel)
-                        put("generationConfig", JSONObject().apply {
-                            put("responseModalities", arrayOf("AUDIO"))
-                        })
                     })
                 }
                 
@@ -97,7 +94,7 @@ class WebSocketManager(
                     } else if (json.has("setupComplete")) {
                         onMessageReceived("Siap! Silakan berbicara.")
                     } else {
-                        onMessageReceived("Respon diterima dari server")
+                        onMessageReceived("Siap! Silakan berbicara.")
                     }
                 } catch (e: Exception) {
                     onMessageReceived("Parse Error: ${e.localizedMessage}")
@@ -111,13 +108,13 @@ class WebSocketManager(
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                onMessageReceived("Koneksi ditutup: $reason (Kode: $code)")
+                onMessageReceived("Koneksi ditutup: $reason")
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 val code = response?.code ?: 0
                 val message = response?.message ?: t.localizedMessage ?: "Tidak diketahui"
-                onMessageReceived("Gagal Terhubung! HTTP $code: $message")
+                onMessageReceived("Gagal: HTTP $code - $message")
             }
         })
     }
