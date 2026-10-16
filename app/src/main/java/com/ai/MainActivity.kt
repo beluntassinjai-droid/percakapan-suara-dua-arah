@@ -10,7 +10,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.compose.foundation.layout.*
@@ -21,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 
@@ -39,7 +37,6 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var apiKey by remember { mutableStateOf(sharedPrefs.getString("api_key", "") ?: "") }
-            
             var selectedModel by remember { mutableStateOf(sharedPrefs.getString("model", "gemini-2.0-flash-exp") ?: "gemini-2.0-flash-exp") }
             var selectedEndpoint by remember { mutableStateOf(sharedPrefs.getString("endpoint", "v1alpha") ?: "v1alpha") }
             var selectedVoice by remember { mutableStateOf(sharedPrefs.getString("voice", "Puck") ?: "Puck") }
@@ -50,26 +47,8 @@ class MainActivity : ComponentActivity() {
 
             val lifecycleOwner = LocalLifecycleOwner.current
 
-            val modelList = listOf(
-                "gemini-2.0-flash-exp",
-                "gemini-1.5-flash"
-            )
+            val modelList = listOf("gemini-2.0-flash-exp", "gemini-1.5-flash")
             var expandedModel by remember { mutableStateOf(false) }
-
-            val endpointList = listOf(
-                "v1alpha",
-                "v1beta"
-            )
-            var expandedEndpoint by remember { mutableStateOf(false) }
-
-            val voiceList = listOf(
-                "Puck",
-                "Charon",
-                "Kore",
-                "Fenrir",
-                "Aoede"
-            )
-            var expandedVoice by remember { mutableStateOf(false) }
 
             val permissionsLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestMultiplePermissions()
@@ -116,96 +95,14 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = { expandedModel = true },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Model: $selectedModel")
-                            }
-                            DropdownMenu(
-                                expanded = expandedModel,
-                                onDismissRequest = { expandedModel = false }
-                            ) {
-                                modelList.forEach { item ->
-                                    DropdownMenuItem(
-                                        text = { Text(item) },
-                                        onClick = {
-                                            selectedModel = item
-                                            expandedModel = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = { expandedEndpoint = true },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Endpoint: $selectedEndpoint")
-                            }
-                            DropdownMenu(
-                                expanded = expandedEndpoint,
-                                onDismissRequest = { expandedEndpoint = false }
-                            ) {
-                                endpointList.forEach { item ->
-                                    DropdownMenuItem(
-                                        text = { Text(item) },
-                                        onClick = {
-                                            selectedEndpoint = item
-                                            expandedEndpoint = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = { expandedVoice = true },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Suara AI: $selectedVoice")
-                            }
-                            DropdownMenu(
-                                expanded = expandedVoice,
-                                onDismissRequest = { expandedVoice = false }
-                            ) {
-                                voiceList.forEach { item ->
-                                    DropdownMenuItem(
-                                        text = { Text(item) },
-                                        onClick = {
-                                            selectedVoice = item
-                                            expandedVoice = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Button(
                             onClick = {
                                 if (apiKey.isNotBlank()) {
-                                    sharedPrefs.edit()
-                                        .putString("api_key", apiKey)
-                                        .putString("model", selectedModel)
-                                        .putString("endpoint", selectedEndpoint)
-                                        .putString("voice", selectedVoice)
-                                        .apply()
+                                    sharedPrefs.edit().putString("api_key", apiKey).apply()
                                     showSettings = false
                                     statusText = "Pengaturan disimpan"
-                                } else {
-                                    statusText = "API Key tidak boleh kosong!"
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -214,21 +111,15 @@ class MainActivity : ComponentActivity() {
                         }
                     } else {
                         Text(text = statusText)
-                        
                         Spacer(modifier = Modifier.height(24.dp))
 
                         Button(
                             onClick = {
                                 if (!isConnected) {
-                                    if (apiKey.isBlank()) {
-                                        showSettings = true
-                                        return@Button
-                                    }
                                     val hasAudio = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
                                     val hasCamera = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
                                     if (hasAudio && hasCamera) {
-                                        statusText = "Menghubungkan..."
                                         startLiveSession(
                                             apiKey, selectedModel, selectedEndpoint, selectedVoice,
                                             lifecycleOwner,
@@ -249,14 +140,6 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(if (isConnected) "Berhenti Navigasi" else "Mulai Navigasi Live")
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        TextButton(
-                            onClick = { showSettings = true }
-                        ) {
-                            Text("Ubah Pengaturan & API Key")
                         }
                     }
                 }
@@ -317,9 +200,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun imageProxyToJpegByteArray(image: ImageProxy): ByteArray? {
-        if (image.format != ImageFormat.YUV_420_888) {
-            return null
-        }
+        if (image.format != ImageFormat.YUV_420_888) return null
         val yBuffer = image.planes[0].buffer
         val uBuffer = image.planes[1].buffer
         val vBuffer = image.planes[2].buffer
