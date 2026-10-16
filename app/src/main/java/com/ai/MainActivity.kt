@@ -3,6 +3,9 @@ package com.ai
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.ImageFormat
+import android.graphics.Rect
+import android.graphics.YuvImage
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -19,6 +22,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 
 class MainActivity : ComponentActivity() {
@@ -36,7 +40,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             var apiKey by remember { mutableStateOf(sharedPrefs.getString("api_key", "") ?: "") }
             
-            // Variabel Pengaturan (Disesuaikan dengan Model Live Gemini Resmi)
             var selectedModel by remember { mutableStateOf(sharedPrefs.getString("model", "gemini-2.0-flash-exp") ?: "gemini-2.0-flash-exp") }
             var selectedEndpoint by remember { mutableStateOf(sharedPrefs.getString("endpoint", "v1alpha") ?: "v1alpha") }
             var selectedVoice by remember { mutableStateOf(sharedPrefs.getString("voice", "Puck") ?: "Puck") }
@@ -45,24 +48,20 @@ class MainActivity : ComponentActivity() {
             var isConnected by remember { mutableStateOf(false) }
             var showSettings by remember { mutableStateOf(apiKey.isEmpty()) }
 
-            val coroutineScope = rememberCoroutineScope()
             val lifecycleOwner = LocalLifecycleOwner.current
 
-            // 1. Daftar Pilihan Model Live Gemini Resmi
             val modelList = listOf(
                 "gemini-2.0-flash-exp",
                 "gemini-1.5-flash"
             )
             var expandedModel by remember { mutableStateOf(false) }
 
-            // 2. Daftar Pilihan Endpoint
             val endpointList = listOf(
                 "v1alpha",
                 "v1beta"
             )
             var expandedEndpoint by remember { mutableStateOf(false) }
 
-            // 3. Daftar Pilihan Karakter Suara (Voice Config)
             val voiceList = listOf(
                 "Puck",
                 "Charon",
@@ -72,7 +71,6 @@ class MainActivity : ComponentActivity() {
             )
             var expandedVoice by remember { mutableStateOf(false) }
 
-            // Handler Perizinan Kamera & Mikrofon Sekaligus
             val permissionsLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestMultiplePermissions()
             ) { permissions ->
@@ -111,7 +109,6 @@ class MainActivity : ComponentActivity() {
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     if (showSettings) {
-                        // Input API Key
                         OutlinedTextField(
                             value = apiKey,
                             onValueChange = { apiKey = it },
@@ -121,7 +118,6 @@ class MainActivity : ComponentActivity() {
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         
-                        // Dropdown 1: Model
                         Box(modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(
                                 onClick = { expandedModel = true },
@@ -147,7 +143,6 @@ class MainActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Dropdown 2: Endpoint
                         Box(modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(
                                 onClick = { expandedEndpoint = true },
@@ -173,7 +168,6 @@ class MainActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Dropdown 3: Karakter Suara
                         Box(modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(
                                 onClick = { expandedVoice = true },
@@ -199,7 +193,6 @@ class MainActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Tombol Simpan
                         Button(
                             onClick = {
                                 if (apiKey.isNotBlank()) {
@@ -290,12 +283,10 @@ class MainActivity : ComponentActivity() {
         webSocketManager?.connect()
         onConnected()
 
-        // 1. Jalankan Rekaman Suara
         audioRecorder.startRecording { audioChunk ->
             webSocketManager?.sendAudioChunk(audioChunk)
         }
 
-        // 2. Jalankan Stream Kamera Belakang (Visual Live)
         startCameraStream(lifecycleOwner)
     }
 
@@ -308,8 +299,7 @@ class MainActivity : ComponentActivity() {
                 .build()
 
             imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
-                // Mengonversi bingkai kamera ke JPEG / Base64 dan dikirim via WebSocket
-                val imageBytes = imageProxy.toJpegByteArray()
+                val imageBytes = imageProxyToJpegByteArray(imageProxy)
                 if (imageBytes != null) {
                     webSocketManager?.sendImageChunk(imageBytes)
                 }
@@ -324,6 +314,29 @@ class MainActivity : ComponentActivity() {
                 e.printStackTrace()
             }
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun imageProxyToJpegByteArray(image: ImageProxy): ByteArray? {
+        if (image.format != ImageFormat.YUV_420_888) {
+            return null
+        }
+        val yBuffer = image.planes[0].buffer
+        val uBuffer = image.planes[1].buffer
+        val vBuffer = image.planes[2].buffer
+
+        val ySize = yBuffer.remaining()
+        val uSize = uBuffer.remaining()
+        val vSize = vBuffer.remaining()
+
+        val nv21 = ByteArray(ySize + uSize + vSize)
+        yBuffer.get(nv21, 0, ySize)
+        vBuffer.get(nv21, ySize, vSize)
+        uBuffer.get(nv21, ySize + vSize, uSize)
+
+        val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
+        val out = ByteArrayOutputStream()
+        yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 75, out)
+        return out.toByteArray()
     }
 
     private fun stopLiveSession() {
@@ -342,13 +355,4 @@ class MainActivity : ComponentActivity() {
         stopLiveSession()
         cameraExecutor.shutdown()
     }
-}
-
-// Extension Helper untuk konversi ImageProxy ke ByteArray JPEG
-private fun ImageProxy.toJpegByteArray(): ByteArray? {
-    val plane = planes[0]
-    val buffer = plane.buffer
-    val bytes = ByteArray(buffer.remaining())
-    buffer.get(bytes)
-    return bytes
 }
