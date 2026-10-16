@@ -13,9 +13,10 @@ import org.json.JSONObject
 
 class KtorWebSocketManager(
     private val apiKey: String,
-    private val selectedModel: String,
-    private val selectedEndpoint: String,
-    private val selectedVoice: String,
+    // Mengunci model secara langsung ke versi terbaru / generasi berikutnya
+    private val selectedModel: String = "gemini-2.5-flash", 
+    private val selectedEndpoint: String = "v1beta",
+    private val selectedVoice: String = "Puck",
     private val onMessageReceived: (String) -> Unit
 ) {
     private val client = HttpClient(OkHttp) {
@@ -60,17 +61,17 @@ class KtorWebSocketManager(
         scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         scope?.launch {
             try {
-                onMessageReceived("Menghubungkan ke Gemini Live...")
+                onMessageReceived("Menghubungkan ke Gemini ($selectedModel)...")
                 
                 val host = "generativelanguage.googleapis.com"
-                val path = "/ws/google.ai.generativelanguage.$selectedEndpoint.GenerativeService.BidiGenerateContent"
+                val path = "/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
                 
                 client.wss(
                     host = host,
                     path = "$path?key=$apiKey"
                 ) {
                     session = this
-                    onMessageReceived("Terhubung! Mengirim setup...")
+                    onMessageReceived("Terhubung! Mengirim setup model...")
 
                     val setupMessage = """
                         {
@@ -96,6 +97,8 @@ class KtorWebSocketManager(
                     for (frame in incoming) {
                         if (frame is Frame.Text) {
                             val text = frame.readText()
+                            onMessageReceived("Server: ${text.take(80)}")
+                            
                             try {
                                 val json = JSONObject(text)
                                 
@@ -106,11 +109,15 @@ class KtorWebSocketManager(
                                     continue
                                 }
                                 
-                                if (json.has("serverContent")) {
-                                    val serverContent = json.getJSONObject("serverContent")
-                                    
-                                    if (serverContent.has("modelTurn")) {
-                                        val modelTurn = serverContent.getJSONObject("modelTurn")
+                                val contentObj = when {
+                                    json.has("serverContent") -> json.getJSONObject("serverContent")
+                                    json.has("bidiGenerateContentResponse") -> json.getJSONObject("bidiGenerateContentResponse").optJSONObject("serverContent")
+                                    else -> null
+                                }
+
+                                if (contentObj != null) {
+                                    if (contentObj.has("modelTurn")) {
+                                        val modelTurn = contentObj.getJSONObject("modelTurn")
                                         val parts = modelTurn.getJSONArray("parts")
                                         for (i in 0 until parts.length()) {
                                             val part = parts.getJSONObject(i)
@@ -128,7 +135,7 @@ class KtorWebSocketManager(
                                     }
                                 }
                             } catch (e: Exception) {
-                                onMessageReceived("Parse Error: ${e.localizedMessage}")
+                                // Ignore parse error
                             }
                         }
                     }
@@ -144,7 +151,6 @@ class KtorWebSocketManager(
             try {
                 if (session == null || !session!!.isActive) return@launch
                 val base64Audio = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
-                // Format resmi Gemini Live API untuk realtime input audio
                 val audioMessage = """
                     {
                         "realtimeInput": {
@@ -176,7 +182,6 @@ class KtorWebSocketManager(
                 if (session == null || !session!!.isActive) return@launch
                 
                 val base64Image = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
-                // Format resmi Gemini Live API untuk realtime input video/gambar
                 val imageMessage = """
                     {
                         "realtimeInput": {
