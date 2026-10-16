@@ -117,7 +117,6 @@ class KtorWebSocketManager(
                                             if (part.has("inlineData")) {
                                                 val inlineData = part.getJSONObject("inlineData")
                                                 val base64Data = inlineData.getString("data")
-                                                // Menggunakan android.util.Base64 yang aman untuk Android
                                                 val audioBytes = Base64.decode(base64Data, Base64.NO_WRAP)
                                                 audioTrack?.write(audioBytes, 0, audioBytes.size)
                                                 onMessageReceived("Memutar suara AI...")
@@ -126,7 +125,6 @@ class KtorWebSocketManager(
                                     }
                                 }
                             } catch (e: Exception) {
-                                // Ditangkap agar error parsing terlihat di UI jika format tidak sesuai
                                 onMessageReceived("Parse Error: ${e.localizedMessage}")
                             }
                         }
@@ -141,7 +139,6 @@ class KtorWebSocketManager(
     fun sendAudioChunk(audioBytes: ByteArray) {
         scope?.launch {
             try {
-                // Menggunakan android.util.Base64
                 val base64Audio = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
                 val audioMessage = """
                     {
@@ -162,7 +159,30 @@ class KtorWebSocketManager(
         }
     }
 
-    // Fungsi baru untuk mengirim sinyal selesai bicara ke server
+    // Fungsi untuk mengirim tangkapan kamera/video secara real-time ke WebSocket Gemini
+    fun sendImageChunk(imageBytes: ByteArray) {
+        scope?.launch {
+            try {
+                val base64Image = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+                val imageMessage = """
+                    {
+                        "realtimeInput": {
+                            "mediaChunks": [
+                                {
+                                    "mimeType": "image/jpeg",
+                                    "data": "$base64Image"
+                                }
+                            ]
+                        }
+                    }
+                """.trimIndent()
+                session?.send(Frame.Text(imageMessage))
+            } catch (e: Exception) {
+                onMessageReceived("Gagal kirim gambar: ${e.localizedMessage}")
+            }
+        }
+    }
+
     fun sendEndOfturn() {
         scope?.launch {
             try {
