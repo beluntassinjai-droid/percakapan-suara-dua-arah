@@ -79,9 +79,11 @@ class KtorWebSocketManager(
                                 "generationConfig": {
                                     "responseModalities": ["AUDIO"]
                                 },
-                                "voiceConfig": {
-                                    "prebuiltVoiceConfig": {
-                                        "voiceName": "$selectedVoice"
+                                "speechConfig": {
+                                    "voiceConfig": {
+                                        "prebuiltVoiceConfig": {
+                                            "voiceName": "$selectedVoice"
+                                        }
                                     }
                                 }
                             }
@@ -89,7 +91,7 @@ class KtorWebSocketManager(
                     """.trimIndent()
                     send(Frame.Text(setupMessage))
                     
-                    onMessageReceived("Menunggu respons server suara...")
+                    onMessageReceived("Siap! Silakan bicara...")
 
                     for (frame in incoming) {
                         if (frame is Frame.Text) {
@@ -97,6 +99,7 @@ class KtorWebSocketManager(
                             try {
                                 val json = JSONObject(text)
                                 
+                                // Jika server mengirim error
                                 if (json.has("error")) {
                                     val errObj = json.getJSONObject("error")
                                     val errMsg = errObj.optString("message", "Unknown error")
@@ -104,6 +107,7 @@ class KtorWebSocketManager(
                                     continue
                                 }
                                 
+                                // Tangkap isi konten dari server
                                 if (json.has("serverContent")) {
                                     val serverContent = json.getJSONObject("serverContent")
                                     
@@ -123,6 +127,18 @@ class KtorWebSocketManager(
                                                 onMessageReceived("Memutar suara AI...")
                                             }
                                         }
+                                    }
+                                    
+                                    // Cek jika turn selesai
+                                    if (serverContent.optBoolean("turnComplete", false)) {
+                                        onMessageReceived("AI selesai merespons. Silakan bicara lagi.")
+                                    }
+                                } else {
+                                    // Debugging: Tampilkan potongan teks respons mentah agar kita tahu apa yang dikirim server
+                                    if (text.length < 100) {
+                                        onMessageReceived("Respon: $text")
+                                    } else {
+                                        onMessageReceived("Menerima data dari server...")
                                     }
                                 }
                             } catch (e: Exception) {
@@ -163,7 +179,6 @@ class KtorWebSocketManager(
         }
     }
 
-    // Fungsi kirim gambar dengan jeda 1 detik (throttle) untuk menghindari overload / channel cancelled
     fun sendImageChunk(imageBytes: ByteArray) {
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastImageSendTime < 1000) {
@@ -198,27 +213,6 @@ class KtorWebSocketManager(
         }
     }
 
-    fun sendEndOfturn() {
-        scope?.launch {
-            try {
-                if (session == null || !session!!.isActive) return@launch
-                val endMessage = """
-                    {
-                        "clientContent": {
-                            "turnComplete": true
-                        }
-                    }
-                """.trimIndent()
-                session?.send(Frame.Text(endMessage))
-                onMessageReceived("Selesai bicara, menunggu balasan AI...")
-            } catch (e: Exception) {
-                if (e.localizedMessage?.contains("cancelled") != true) {
-                    onMessageReceived("Gagal kirim end of turn: ${e.localizedMessage}")
-                }
-            }
-        }
-    }
-
     fun disconnect() {
         scope?.cancel()
         scope = null
@@ -231,7 +225,7 @@ class KtorWebSocketManager(
             try {
                 session?.close()
             } catch (e: Exception) {
-                // Abaikan error saat menutup sesi
+                // Ignore
             }
         }
         session = null
