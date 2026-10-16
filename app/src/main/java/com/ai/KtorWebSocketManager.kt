@@ -99,7 +99,6 @@ class KtorWebSocketManager(
                             try {
                                 val json = JSONObject(text)
                                 
-                                // Jika server mengirim error
                                 if (json.has("error")) {
                                     val errObj = json.getJSONObject("error")
                                     val errMsg = errObj.optString("message", "Unknown error")
@@ -107,7 +106,6 @@ class KtorWebSocketManager(
                                     continue
                                 }
                                 
-                                // Tangkap isi konten dari server
                                 if (json.has("serverContent")) {
                                     val serverContent = json.getJSONObject("serverContent")
                                     
@@ -128,18 +126,6 @@ class KtorWebSocketManager(
                                             }
                                         }
                                     }
-                                    
-                                    // Cek jika turn selesai
-                                    if (serverContent.optBoolean("turnComplete", false)) {
-                                        onMessageReceived("AI selesai merespons. Silakan bicara lagi.")
-                                    }
-                                } else {
-                                    // Debugging: Tampilkan potongan teks respons mentah agar kita tahu apa yang dikirim server
-                                    if (text.length < 100) {
-                                        onMessageReceived("Respon: $text")
-                                    } else {
-                                        onMessageReceived("Menerima data dari server...")
-                                    }
                                 }
                             } catch (e: Exception) {
                                 onMessageReceived("Parse Error: ${e.localizedMessage}")
@@ -158,15 +144,14 @@ class KtorWebSocketManager(
             try {
                 if (session == null || !session!!.isActive) return@launch
                 val base64Audio = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
+                // Format resmi Gemini Live API untuk realtime input audio
                 val audioMessage = """
                     {
                         "realtimeInput": {
-                            "mediaChunks": [
-                                {
-                                    "mimeType": "audio/pcm",
-                                    "data": "$base64Audio"
-                                }
-                            ]
+                            "audio": {
+                                "data": "$base64Audio",
+                                "mimeType": "audio/pcm;rate=24000"
+                            }
                         }
                     }
                 """.trimIndent()
@@ -191,15 +176,14 @@ class KtorWebSocketManager(
                 if (session == null || !session!!.isActive) return@launch
                 
                 val base64Image = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+                // Format resmi Gemini Live API untuk realtime input video/gambar
                 val imageMessage = """
                     {
                         "realtimeInput": {
-                            "mediaChunks": [
-                                {
-                                    "mimeType": "image/jpeg",
-                                    "data": "$base64Image"
-                                }
-                            ]
+                            "video": {
+                                "data": "$base64Image",
+                                "mimeType": "image/jpeg"
+                            }
                         }
                     }
                 """.trimIndent()
