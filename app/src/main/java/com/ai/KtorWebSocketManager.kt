@@ -27,6 +27,7 @@ class KtorWebSocketManager(
     private var scope: CoroutineScope? = null
     private var audioTrack: AudioTrack? = null
     private var session: DefaultClientWebSocketSession? = null
+    private var lastImageSendTime: Long = 0
 
     init {
         val sampleRate = 24000
@@ -139,6 +140,7 @@ class KtorWebSocketManager(
     fun sendAudioChunk(audioBytes: ByteArray) {
         scope?.launch {
             try {
+                if (session == null || !session!!.isActive) return@launch
                 val base64Audio = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
                 val audioMessage = """
                     {
@@ -154,15 +156,25 @@ class KtorWebSocketManager(
                 """.trimIndent()
                 session?.send(Frame.Text(audioMessage))
             } catch (e: Exception) {
-                onMessageReceived("Gagal kirim audio: ${e.localizedMessage}")
+                if (e.localizedMessage?.contains("cancelled") != true) {
+                    onMessageReceived("Gagal kirim audio: ${e.localizedMessage}")
+                }
             }
         }
     }
 
-    // Fungsi untuk mengirim tangkapan kamera/video secara real-time ke WebSocket Gemini
+    // Fungsi kirim gambar dengan jeda 1 detik (throttle) untuk menghindari overload / channel cancelled
     fun sendImageChunk(imageBytes: ByteArray) {
-        scope?.launch {
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastImageSendTime < 1000) {
+            return
+        }
+        lastImageSendTime = currentTime
+
+        scope?.launch(Dispatchers.IO) {
             try {
+                if (session == null || !session!!.isActive) return@launch
+                
                 val base64Image = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
                 val imageMessage = """
                     {
@@ -176,9 +188,12 @@ class KtorWebSocketManager(
                         }
                     }
                 """.trimIndent()
+                
                 session?.send(Frame.Text(imageMessage))
             } catch (e: Exception) {
-                onMessageReceived("Gagal kirim gambar: ${e.localizedMessage}")
+                if (e.localizedMessage?.contains("cancelled") != true) {
+                    onMessageReceived("Gagal kirim gambar: ${e.localizedMessage}")
+                }
             }
         }
     }
@@ -186,6 +201,7 @@ class KtorWebSocketManager(
     fun sendEndOfturn() {
         scope?.launch {
             try {
+                if (session == null || !session!!.isActive) return@launch
                 val endMessage = """
                     {
                         "clientContent": {
@@ -196,7 +212,9 @@ class KtorWebSocketManager(
                 session?.send(Frame.Text(endMessage))
                 onMessageReceived("Selesai bicara, menunggu balasan AI...")
             } catch (e: Exception) {
-                onMessageReceived("Gagal kirim end of turn: ${e.localizedMessage}")
+                if (e.localizedMessage?.contains("cancelled") != true) {
+                    onMessageReceived("Gagal kirim end of turn: ${e.localizedMessage}")
+                }
             }
         }
     }
@@ -210,7 +228,11 @@ class KtorWebSocketManager(
         audioTrack = null
         
         runBlocking {
-            session?.close()
+            try {
+                session?.close()
+            } catch (e: Exception) {
+                // Abaikan error saat menutup sesi
+            }
         }
         session = null
     }
