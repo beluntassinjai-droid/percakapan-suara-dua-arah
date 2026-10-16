@@ -10,6 +10,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.compose.foundation.layout.*
@@ -47,12 +48,9 @@ class MainActivity : ComponentActivity() {
 
             val lifecycleOwner = LocalLifecycleOwner.current
 
-            val modelList = listOf("gemini-2.0-flash-exp", "gemini-1.5-flash")
-            var expandedModel by remember { mutableStateOf(false) }
-
             val permissionsLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestMultiplePermissions()
-            ) { permissions ->
+            ) { permissions: Map<String, Boolean> ->
                 val audioGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
                 val cameraGranted = permissions[Manifest.permission.CAMERA] ?: false
 
