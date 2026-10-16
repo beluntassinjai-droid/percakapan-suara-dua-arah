@@ -8,19 +8,24 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.camera.core.*
+import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
+import java.util.concurrent.Executors
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var audioRecorder: AudioRecorder
     private var webSocketManager: KtorWebSocketManager? = null
+    private val cameraExecutor = Executors.newSingleThreadExecutor()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,8 +36,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             var apiKey by remember { mutableStateOf(sharedPrefs.getString("api_key", "") ?: "") }
             
-            // Variabel Pengaturan
-            var selectedModel by remember { mutableStateOf(sharedPrefs.getString("model", "gemini-3.8-live") ?: "gemini-3.8-live") }
+            // Variabel Pengaturan (Disesuaikan dengan Model Live Gemini Resmi)
+            var selectedModel by remember { mutableStateOf(sharedPrefs.getString("model", "gemini-2.0-flash-exp") ?: "gemini-2.0-flash-exp") }
             var selectedEndpoint by remember { mutableStateOf(sharedPrefs.getString("endpoint", "v1alpha") ?: "v1alpha") }
             var selectedVoice by remember { mutableStateOf(sharedPrefs.getString("voice", "Puck") ?: "Puck") }
             
@@ -41,21 +46,19 @@ class MainActivity : ComponentActivity() {
             var showSettings by remember { mutableStateOf(apiKey.isEmpty()) }
 
             val coroutineScope = rememberCoroutineScope()
+            val lifecycleOwner = LocalLifecycleOwner.current
 
-            // 1. Daftar Pilihan Model Versi 3
+            // 1. Daftar Pilihan Model Live Gemini Resmi
             val modelList = listOf(
-                "gemini-3.8-live",
-                "gemini-3.8-live-extended-thinking",
-                "gemini-3.5-transcribe-live",
-                "gemini-3.5-live-translate-preview"
+                "gemini-2.0-flash-exp",
+                "gemini-1.5-flash"
             )
             var expandedModel by remember { mutableStateOf(false) }
 
             // 2. Daftar Pilihan Endpoint
             val endpointList = listOf(
                 "v1alpha",
-                "v1beta",
-                "v1"
+                "v1beta"
             )
             var expandedEndpoint by remember { mutableStateOf(false) }
 
@@ -69,27 +72,23 @@ class MainActivity : ComponentActivity() {
             )
             var expandedVoice by remember { mutableStateOf(false) }
 
-            val permissionLauncher = rememberLauncherForActivityResult(
-                ActivityResultContracts.RequestPermission()
-            ) { isGranted ->
-                if (isGranted) {
+            // Handler Perizinan Kamera & Mikrofon Sekaligus
+            val permissionsLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestMultiplePermissions()
+            ) { permissions ->
+                val audioGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
+                val cameraGranted = permissions[Manifest.permission.CAMERA] ?: false
+
+                if (audioGranted && cameraGranted) {
                     statusText = "Izin diberikan, menghubungkan..."
-                    webSocketManager = KtorWebSocketManager(
-                        apiKey = apiKey,
-                        selectedModel = selectedModel,
-                        selectedEndpoint = selectedEndpoint,
-                        selectedVoice = selectedVoice,
-                        onMessageReceived = { msg -> statusText = msg }
+                    startLiveSession(
+                        apiKey, selectedModel, selectedEndpoint, selectedVoice,
+                        lifecycleOwner,
+                        onStatusChange = { statusText = it },
+                        onConnected = { isConnected = true }
                     )
-                    webSocketManager?.connect()
-                    isConnected = true
-                    coroutineScope.launch {
-                        audioRecorder.startRecording { audioChunk ->
-                            webSocketManager?.sendAudioChunk(audioChunk)
-                        }
-                    }
                 } else {
-                    statusText = "Izin mikrofon ditolak"
+                    statusText = "Izin Kamera dan Mikrofon diperlukan!"
                 }
             }
 
@@ -105,7 +104,7 @@ class MainActivity : ComponentActivity() {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Percakapan Suara Dua Arah",
+                        text = "Navigasi AI Live Voice & Vision",
                         style = MaterialTheme.typography.headlineMedium
                     )
                     
@@ -122,7 +121,7 @@ class MainActivity : ComponentActivity() {
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         
-                        // Dropdown 1: Model Versi 3
+                        // Dropdown 1: Model
                         Box(modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(
                                 onClick = { expandedModel = true },
@@ -174,7 +173,7 @@ class MainActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Dropdown 3: Karakter Suara (Voice Config)
+                        // Dropdown 3: Karakter Suara
                         Box(modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(
                                 onClick = { expandedVoice = true },
@@ -232,36 +231,31 @@ class MainActivity : ComponentActivity() {
                                         showSettings = true
                                         return@Button
                                     }
-                                    val permission = Manifest.permission.RECORD_AUDIO
-                                    if (ContextCompat.checkSelfPermission(this@MainActivity, permission) == PackageManager.PERMISSION_GRANTED) {
+                                    val hasAudio = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                                    val hasCamera = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+
+                                    if (hasAudio && hasCamera) {
                                         statusText = "Menghubungkan..."
-                                        webSocketManager = KtorWebSocketManager(
-                                            apiKey = apiKey,
-                                            selectedModel = selectedModel,
-                                            selectedEndpoint = selectedEndpoint,
-                                            selectedVoice = selectedVoice,
-                                            onMessageReceived = { msg -> statusText = msg }
+                                        startLiveSession(
+                                            apiKey, selectedModel, selectedEndpoint, selectedVoice,
+                                            lifecycleOwner,
+                                            onStatusChange = { statusText = it },
+                                            onConnected = { isConnected = true }
                                         )
-                                        webSocketManager?.connect()
-                                        isConnected = true
-                                        coroutineScope.launch {
-                                            audioRecorder.startRecording { audioChunk ->
-                                                webSocketManager?.sendAudioChunk(audioChunk)
-                                            }
-                                        }
                                     } else {
-                                        permissionLauncher.launch(permission)
+                                        permissionsLauncher.launch(
+                                            arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
+                                        )
                                     }
                                 } else {
-                                    audioRecorder.stopRecording()
-                                    webSocketManager?.disconnect()
+                                    stopLiveSession()
                                     isConnected = false
-                                    statusText = "Berhenti Bicara"
+                                    statusText = "Sesi Dimatikan"
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(if (isConnected) "Berhenti Bicara" else "Mulai Bicara")
+                            Text(if (isConnected) "Berhenti Navigasi" else "Mulai Navigasi Live")
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -277,9 +271,84 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
+    private fun startLiveSession(
+        apiKey: String,
+        model: String,
+        endpoint: String,
+        voice: String,
+        lifecycleOwner: androidx.lifecycle.LifecycleOwner,
+        onStatusChange: (String) -> Unit,
+        onConnected: () -> Unit
+    ) {
+        webSocketManager = KtorWebSocketManager(
+            apiKey = apiKey,
+            selectedModel = model,
+            selectedEndpoint = endpoint,
+            selectedVoice = voice,
+            onMessageReceived = { msg -> onStatusChange(msg) }
+        )
+        webSocketManager?.connect()
+        onConnected()
+
+        // 1. Jalankan Rekaman Suara
+        audioRecorder.startRecording { audioChunk ->
+            webSocketManager?.sendAudioChunk(audioChunk)
+        }
+
+        // 2. Jalankan Stream Kamera Belakang (Visual Live)
+        startCameraStream(lifecycleOwner)
+    }
+
+    private fun startCameraStream(lifecycleOwner: androidx.lifecycle.LifecycleOwner) {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+        cameraProviderFuture.addListener({
+            val cameraProvider = cameraProviderFuture.get()
+            val imageAnalysis = ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+
+            imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
+                // Mengonversi bingkai kamera ke JPEG / Base64 dan dikirim via WebSocket
+                val imageBytes = imageProxy.toJpegByteArray()
+                if (imageBytes != null) {
+                    webSocketManager?.sendImageChunk(imageBytes)
+                }
+                imageProxy.close()
+            }
+
+            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+            try {
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, imageAnalysis)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun stopLiveSession() {
         audioRecorder.stopRecording()
         webSocketManager?.disconnect()
+        try {
+            val cameraProvider = ProcessCameraProvider.getInstance(this).get()
+            cameraProvider.unbindAll()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopLiveSession()
+        cameraExecutor.shutdown()
+    }
+}
+
+// Extension Helper untuk konversi ImageProxy ke ByteArray JPEG
+private fun ImageProxy.toJpegByteArray(): ByteArray? {
+    val plane = planes[0]
+    val buffer = plane.buffer
+    val bytes = ByteArray(buffer.remaining())
+    buffer.get(bytes)
+    return bytes
 }
