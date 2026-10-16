@@ -15,7 +15,8 @@ class AudioRecorder(private val context: Context) {
     private var isRecording = false
     private var recordingJob: Job? = null
 
-    private val sampleRate = 16000
+    // Disesuaikan ke 24000 Hz agar sesuai dengan standar input Gemini Live API
+    private val sampleRate = 24000
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
 
