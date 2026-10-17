@@ -7,6 +7,7 @@ plugins {
 android {
     namespace 'com.ai'
     compileSdk 34
+
     defaultConfig {
         applicationId 'com.ai'
         minSdk 22
@@ -14,10 +15,19 @@ android {
         versionCode 91
         versionName '91'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+
+        // Batasi arsitektur native ke ARM dan x86_64 untuk mencegah error NDK/MIPS di GitHub Actions
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64'
+        }
     }
 
     buildTypes {
-        debug { debuggable true; applicationIdSuffix '.debug'; versionNameSuffix '-debug' }
+        debug { 
+            debuggable true
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-debug' 
+        }
         release {
             minifyEnabled false
             shrinkResources false
@@ -33,18 +43,41 @@ android {
 
     flavorDimensions 'versi'
     productFlavors {
-        gratis { dimension 'versi'; applicationIdSuffix '.gratis'; versionNameSuffix '-gratis' }
-        pro { dimension 'versi'; applicationIdSuffix '.pro'; versionNameSuffix '-pro' }
+        gratis { 
+            dimension 'versi'
+            applicationIdSuffix '.gratis'
+            versionNameSuffix '-gratis' 
+        }
+        pro { 
+            dimension 'versi'
+            applicationIdSuffix '.pro'
+            versionNameSuffix '-pro' 
+        }
     }
 
-    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-    kotlinOptions { jvmTarget = '17' }
-    buildFeatures { viewBinding true; compose true }
-    composeOptions { kotlinCompilerExtensionVersion '1.5.14' }
+    compileOptions { 
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17 
+    }
+
+    kotlinOptions { 
+        jvmTarget = '17' 
+    }
+
+    buildFeatures { 
+        viewBinding true
+        compose true 
+    }
+
+    composeOptions { 
+        kotlinCompilerExtensionVersion '1.5.14' 
+    }
+
     lint {
         abortOnError false
         checkReleaseBuilds false
     }
+
     packaging.resources.excludes += ['/META-INF/{AL2.0,LGPL2.1}', '/META-INF/LICENSE*', '/META-INF/NOTICE*']
 }
 
