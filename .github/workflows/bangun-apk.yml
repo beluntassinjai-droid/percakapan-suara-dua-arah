@@ -48,7 +48,8 @@ jobs:
         run: |
           GDIR=$(find . -maxdepth 4 \( -name "settings.gradle*" -o -name "build.gradle*" \) ! -path "*/build/*" | head -n 1)
           [ -n "$GDIR" ] && cd "$(dirname "$GDIR")"
-          gradle assembleDebug --no-daemon -x lint -x test
+          chmod +x gradlew
+          ./gradlew clean assembleDebug --no-daemon -x lint -x test
 
       - name: Siapkan berkas APK
         run: |
